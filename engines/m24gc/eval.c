@@ -1,5 +1,6 @@
-#include "m24gc.h"
-#include "uci.h"
+#include "defs.h"
+#include "data.h"
+#include "protos.h"
 
 // Piece values
 int piece_values[6] = {20000, 100, 300, 325, 500, 900};

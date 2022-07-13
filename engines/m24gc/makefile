@@ -1,7 +1,7 @@
 CC=gcc
-CFLAGS = -g -O3
-DEPS = m24gc.h uci.h
-OBJ = main.o bitboards.o board.o uci.o eval.o search.o
+CFLAGS = -g
+DEPS = data.h defs.h protos.h
+OBJ = main.o bitboards.o board.o uci.o eval.o search.o data.o
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)

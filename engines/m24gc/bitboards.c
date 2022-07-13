@@ -1,25 +1,11 @@
-#include "m24gc.h"
-#include "uci.h"
+#include "defs.h"
+#include "data.h"
+#include "protos.h"
 
 xorshift32_state seed = {725UL};
 
-// [side to move][square index ]
-U64 pawn_attack_table[2][64]; 
-U64 knight_attack_table[64];
-U64 king_attack_table[64];
-U64 queen_attack_table[64];
-
-// [attacker square][magic hash]
-U64 bishopAttackTable[64][512]; 
-U64 rookAttackTable[64][4096];
-
 MagicInfo magicBishopInfo[64];
 MagicInfo magicRookInfo[64];
-
-// Magic bitboards for pins
-/* We use magic bitboards to generate pinmasks for legal move generation */
-U64 bishopPinTable[64][512]; 
-U64 rookPinTable[64][4096]; 
 
 const U64 aFile = C64(0x0101010101010101);
 const U64 hFile = C64(0x8080808080808080);

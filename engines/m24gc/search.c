@@ -1,5 +1,6 @@
-#include "m24gc.h"
-#include "uci.h"
+#include "defs.h"
+#include "data.h"
+#include "protos.h"
 
 // [victim][attacker]
 int MVV_LVA[12][12] = {
@@ -26,15 +27,19 @@ int killer_moves[2][MAX_PLY];
 // [piece][square]
 int history_moves[12][64];
 
-// Search nodes
-U64 nodes;
-
 // Principal variation scoring
 int pv_length[MAX_PLY];
 U16 pv_table[MAX_PLY][MAX_PLY];
 
 // follow PV flag
 int follow_pv;
+
+void clear_tables() {
+    memset(killer_moves, 0, sizeof(killer_moves));
+    memset(history_moves, 0, sizeof(history_moves));
+    memset(pv_length, 0, sizeof(pv_length));
+    memset(pv_table, 0, sizeof(pv_table));
+}
 
 // PV move scoring
 static inline void score_pv() {

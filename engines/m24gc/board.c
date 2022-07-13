@@ -1,48 +1,6 @@
-#include "m24gc.h"
-#include "uci.h"
-
-U64 bitboards[12];
-U64 occupancies[3];
-char piece_on_square[64];
-
-int side_to_move;
-int castling_rights;
-int en_passent_legal;
-int en_passent_square;
-int ply;
-int game_depth;
-int fifty_move;
-U64 hash;
-
-char *piece_characters = "KPNBRQkpnbrq.";
-char char_to_piece_code[] = {
-    ['K'] = K,
-    ['P'] = P,
-    ['N'] = N,
-    ['B'] = B,
-    ['R'] = R,
-    ['Q'] = Q,
-    ['k'] = k,
-    ['p'] = p,
-    ['n'] = n,
-    ['b'] = b,
-    ['q'] = q,
-    ['r'] = r,
-    ['.'] = EMPTY
-};
-
-char *square_strings[64] = {
-    "a1","b1","c1","d1","e1","f1","g1","h1",
-    "a2","b2","c2","d2","e2","f2","g2","h2",
-    "a3","b3","c3","d3","e3","f3","g3","h3",
-    "a4","b4","c4","d4","e4","f4","g4","h4",
-    "a5","b5","c5","d5","e5","f5","g5","h5",
-    "a6","b6","c6","d6","e6","f6","g6","h6",
-    "a7","b7","c7","d7","e7","f7","g7","h7",
-    "a8","b8","c8","d8","e8","f8","g8","h8"
-};
-
-char *promoted_pieces= "nbrq";
+#include "defs.h"
+#include "data.h"
+#include "protos.h"
 
 void print_board() {
     printf("\n");
@@ -127,10 +85,6 @@ void parse_fen(char *fen) {
 /* =================================
            Move Generation
  =================================== */
-
-_move_list move_stack;
-int moves_start_idx[MAX_PLY];
-hist_t game_history[MAX_HIST];
 
 int is_square_attacked(int sq, int side) {
     if (pawn_attack_table[1^side][sq] & bitboards[6*side + 1]) return _TRUE;

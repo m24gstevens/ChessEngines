@@ -1,13 +1,18 @@
-#include "m24gc.h"
-#include "uci.h"
+#include "defs.h"
+#include "data.h"
+#include "protos.h"
+#include <ctype.h>
+#include <stdlib.h>
+#ifdef _WIN64
+    #include <windows.h>
+#else
+    # include <sys/time.h>
+#endif
+
 
 /* ========== ====================================================================
 Most of this is forked from BBC by Code Monkey King and VICE by Bluefever Software
 ================================================================================ */
-
-char *starting_position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-char *kiwipete = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ";
-char *cmk_position = "r2q1rk1/ppp2ppp/2n1bn2/2b1p3/3pP3/3P1NPP/PPP1NPB1/R1BQ1RK1 b - - 0 9 ";
 
 // Get time in ms
 int get_time_ms() {

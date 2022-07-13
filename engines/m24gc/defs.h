@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 #define northOne(bb) (bb << 8)
 #define southOne(bb) (bb >> 8)
 #define northTwo(bb) (bb << 16)
