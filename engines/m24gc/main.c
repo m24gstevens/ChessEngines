@@ -14,16 +14,18 @@ void init_all() {
     prepare_search();
     init_jumper_attack_masks();
     init_slider_attack_masks();
+    init_random_keys();
 }
 
 
 int main() {
-    int debug = 0;
+    int debug = 1;
     init_all();
     init_times();
     if (debug) {
-        parse_fen(starting_position);
-        parse_go("go wtime 30000");
+        parse_fen(kiwipete);
+        test_hash(4);
+        printf("Done\n");
     } else {
         uci();
     }

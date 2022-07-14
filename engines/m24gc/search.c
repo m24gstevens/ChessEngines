@@ -162,11 +162,15 @@ int quiesce(int alpha, int beta) {
     return alpha;
 }
 
+// Late move reduction constants
+const int full_depth_moves = 4;
+const int reduction_limit = 3;
+
 // Negamax with alpha-beta search
 int negamax(int depth, int alpha, int beta) {
     if ((nodes & 2047) == 0)
         communicate();
-    int found_pv = 0;
+
     // initialize PV length
     pv_length[ply] = ply;
 
@@ -186,6 +190,19 @@ int negamax(int depth, int alpha, int beta) {
     if (checked)
         depth++;
 
+    // Null-move pruning
+    if (depth >= 3 && checked == _FALSE && ply) {
+        // Make a "Null" move
+        make_null();
+        // Null move search to find a beta cutoff)
+        score  = -negamax(depth - 1 - NULLMOVE_R, -beta, -beta+1);
+        // Unmake "Null" move
+        unmake_null();
+        // Failhard beta cutoff
+        if (score >= beta)
+            return beta;
+    }
+
     generate_moves();
     // Move-ordering
     score_moves();
@@ -193,23 +210,32 @@ int negamax(int depth, int alpha, int beta) {
     if (follow_pv)
         score_pv();
     sort_moves();
+    // Number of moves searched at current depth
+    int moves_searched = 0;
     for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1];i++) {
         move = move_stack.moves[i].move;
         make_move(move);
         legal_moves++;
-        // PV node hit
-        if (found_pv) {
-            // Search rest of the moves with the goal of proving they are all bad
-            score = -negamax(depth-1, -alpha -1, -alpha);
-            // Need to re-search this move
-            if ((score > alpha) && (score < beta))
-                score = -negamax(depth-1, -beta, -alpha);
-
-        } else {
+        // All other nodes
+        if (moves_searched == 0)
             score = -negamax(depth - 1, -beta, -alpha);
+        else {
+            // Late move reduction
+            if (moves_searched >= full_depth_moves && depth >= reduction_limit &&
+                checked == _FALSE && !(move_flags(move) & 0xC)) {
+                // Reduce the depth
+                score = -negamax(depth - 2, -alpha - 1, -alpha);
+            } else score = alpha + 1;
+            // Principal variation search PVS
+            if (score > alpha) {
+                score = -negamax(depth - 1, -alpha-1, -alpha);
+            }
+            // if LMR fails, search with a full depth on the original alpha-beta bounds
+            if ((score > alpha) && (score < beta))
+                score = -negamax(depth - 1, -beta, -alpha);
         }
         unmake_move();
-
+        moves_searched++;
         // return 0 if time is up
         if (stopped == 1) return 0;
 
@@ -228,7 +254,6 @@ int negamax(int depth, int alpha, int beta) {
                 history_moves[piece_on_square[move_source(move)]][move_target(move)] += depth;
             // PV node
             alpha = score;
-            found_pv = 1;
             // write PV move
             pv_table[ply][ply] = move;
             // copy from deeper ply
@@ -250,18 +275,30 @@ int negamax(int depth, int alpha, int beta) {
 
 void search(int depth) {
     int score;
+    int alpha, beta;
+    // Initial alpha beta bounds
+    alpha = -50000;
+    beta = 50000;
     //iterative deepening
     prepare_search();
     // reset "time is up" flag
     stopped = 0;
-    follow_pv = 0;
 
     for (int current_depth = 1; current_depth <= depth; current_depth++) {
         // if time is up
         if (stopped == 1)
             break;
         follow_pv = 1;
-        score = negamax(current_depth,-50000,50000);
+        score = negamax(current_depth,alpha,beta);
+
+        if ((score <= alpha) || (score >= beta)) {
+            // Fell outside the window; try again with a full-width window, same depth
+            alpha = -50000;
+            beta = 50000;
+            score = negamax(current_depth,alpha,beta);
+        }
+        alpha = score - VALWINDOW;
+        beta = score + VALWINDOW;
         printf("info score cp %d depth %d nodes %lld pv ",score,current_depth,nodes);
         print_pv();
         printf("\n");

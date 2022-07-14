@@ -29,6 +29,8 @@ U64 rookPinAttacks(int sq, U64 occ);
 U64 rankfile_pinmask();
 U64 diagonal_pinmask();
 
+U64 random_u64();
+
 // Board Representation
 void print_board();
 void parse_fen(char *fen);
@@ -45,6 +47,9 @@ int make_move(U16);
 int make_capture(U16);
 void unmake_move();
 
+void make_null();
+void unmake_null();
+
 void perft_test(int);
 void divide(int);
 
@@ -58,6 +63,11 @@ void sort_moves();
 int eval();
 void search(int);
 void print_move_scores();
+
+// Transposition table
+void init_random_keys();
+U64 generate_hash();
+void test_hash(int);
 
 // UCI
 int get_time_ms();

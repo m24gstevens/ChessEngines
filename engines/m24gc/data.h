@@ -19,6 +19,7 @@ extern int side_to_move;
 extern int castling_rights;
 extern int en_passent_legal;
 extern int en_passent_square;
+
 extern int ply;
 extern int game_depth;
 extern int fifty_move;
@@ -37,9 +38,18 @@ extern hist_t game_history[MAX_HIST];
 
 extern U64 nodes;
 
+extern U64 piece_keys[13][64];
+
+extern U64 en_passent_keys[64];
+
+extern U64 castle_keys[16];
+
+extern U64 side_key;
+
 extern char *starting_position;
 extern char *kiwipete;
 extern char *cmk_position;
+extern char *headache_position;
 
 extern int quit;
 extern int movestogo;

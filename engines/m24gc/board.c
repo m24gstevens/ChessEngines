@@ -20,8 +20,9 @@ void print_board() {
     printf("En Passent allowed: %d\t", en_passent_legal);
     if (en_passent_legal) {
         printf("En Passent Target: %s\n", square_strings[en_passent_square]);
-    }
-    printf("\n");
+    } else 
+        printf("\n");
+    printf("Hash: %llx\n\n", hash);
 }
 
 void parse_fen(char *fen) {
@@ -67,8 +68,8 @@ void parse_fen(char *fen) {
     fen++;
     /* en passent square */
     if (*fen != '-') {
-        int rk = *fen++ - 'a';
-        int fl = *fen - '1';
+        int fl = *fen++ - 'a';
+        int rk = *fen - '1';
         en_passent_square = 8 * rk + fl;
         en_passent_legal = 1;
     } else
@@ -79,7 +80,9 @@ void parse_fen(char *fen) {
         occupancies[WHITE] |= bitboards[i];
         occupancies[BLACK] |= bitboards[6 + i];
     }
-    occupancies[BOTH] = occupancies[WHITE] | occupancies[BLACK];    
+    occupancies[BOTH] = occupancies[WHITE] | occupancies[BLACK];
+
+    hash = generate_hash();    
 }
  
 /* =================================
@@ -1213,11 +1216,17 @@ int make_move(U16 move) {
     ply++;
     /* Update the bitboards and 8x8 board */
     int taken_piece = piece_on_square[move_to];
-    bitboards[piece_on_square[move_from]] ^= from_to_bb;
+    int moved_piece = piece_on_square[move_from];
+    // Update global data
+    bitboards[moved_piece] ^= from_to_bb;
     occupancies[BOTH] ^= from_to_bb;
     occupancies[side_to_move] ^= from_to_bb;
-    piece_on_square[move_to] = piece_on_square[move_from];
+    piece_on_square[move_to] = moved_piece;
     piece_on_square[move_from] = EMPTY;
+    // Update piece hashing
+    hash ^= piece_keys[moved_piece][move_from];
+    hash ^= piece_keys[moved_piece][move_to];
+    hash ^= piece_keys[taken_piece][move_to];
     if (flags & 0x4) {
         /* Capture */
         if (flags == 5) {
@@ -1226,10 +1235,13 @@ int make_move(U16 move) {
             bitboards[p - (6 * side_to_move)] ^= ((U64)1 << (move_to + (side_to_move ? 8 : -8)));
             occupancies[1 ^ side_to_move] ^= ((U64)1 << (move_to + (side_to_move ? 8 : -8)));
             occupancies[BOTH] ^= ((U64)1 << (move_to + (side_to_move ? 8 : -8)));
+            // Take care of taken pawn
+            hash ^= piece_keys[p - (6 * side_to_move)][move_to + (side_to_move ? 8 : -8)];
         } else {
             bitboards[taken_piece] ^= ((U64)1 << move_to);
             occupancies[1 ^ side_to_move] ^= ((U64)1 << move_to);
             occupancies[BOTH] ^= ((U64)1 << move_to);
+            // Rest of hash is accounted for
         }
     }
     if (flags & 0x8) {
@@ -1239,6 +1251,9 @@ int make_move(U16 move) {
         piece_on_square[move_to] = promoted_piece;
         bitboards[promoted_piece] ^= ((U64)1 << move_to);
         bitboards[P + (6 * side_to_move)] ^= ((U64)1 << move_to);
+        // Update the hash
+        hash ^= piece_keys[moved_piece][move_to];
+        hash ^= piece_keys[promoted_piece][move_to];
     }
     if (flags == 2) {
         /* Kingside castles */
@@ -1250,6 +1265,9 @@ int make_move(U16 move) {
         occupancies[side_to_move] ^= from_to_bb;
         occupancies[BOTH] ^= from_to_bb;
         bitboards[R + (6 * side_to_move)] ^= from_to_bb;
+        // Update rook hash
+        hash ^= piece_keys[R + (6 * side_to_move)][rook_home_square];
+        hash ^= piece_keys[R + (6 * side_to_move)][rook_castles_square];
     } else if (flags == 3) {
         /* Queenside castles */
         char rook_home_square = (side_to_move ? a8 : a1);
@@ -1260,15 +1278,29 @@ int make_move(U16 move) {
         occupancies[side_to_move] ^= from_to_bb;
         occupancies[BOTH] ^= from_to_bb;
         bitboards[R + (6 * side_to_move)] ^= from_to_bb;
+        // Update rook hash
+        hash ^= piece_keys[R + (6 * side_to_move)][rook_home_square];
+        hash ^= piece_keys[R + (6 * side_to_move)][rook_castles_square];
     }
     /* Update board state, including hash */
-    en_passent_legal = (flags == 1) ? _TRUE : _FALSE;
+    // hash stuff
+    hash ^= side_key;
     if (en_passent_legal)
+        hash ^= en_passent_keys[en_passent_square];
+    hash ^= castle_keys[castling_rights];
+    en_passent_legal = (flags == 1) ? _TRUE : _FALSE;
+    if (en_passent_legal) {
         en_passent_square = (unsigned int) ((int)move_to + (side_to_move ? 8 : -8));
+        hash ^= en_passent_keys[en_passent_square];
+    }
     side_to_move ^= 1;
     castling_rights &= castling_rights_update[move_from];
     castling_rights &= castling_rights_update[move_to];
+    hash ^= castle_keys[castling_rights];
     // King is never left in check, so don't need to unmake ever
+    if (hash != generate_hash()) {
+        printf("Trouble updating with move flags %d\n", move_flags(move));
+    }
     return _TRUE;
 }
 
@@ -1350,6 +1382,35 @@ int make_capture(U16 move) {
     return _FALSE;
 }
 
+// Null "Passing" moves
+void make_null() {
+    /* Save irreversible information to stack */
+    U16 data = encode_hist(0,castling_rights, en_passent_legal, en_passent_square);
+    game_history[game_depth].move = 0;
+    game_history[game_depth].flags = data;
+    game_history[game_depth].fifty_clock = fifty_move;
+    game_history[game_depth].hash = hash;
+    moves_start_idx[ply + 1] = moves_start_idx[ply];
+    /* Update board state, including hash */
+    game_depth++;
+    ply++;
+    en_passent_legal = _FALSE;
+    side_to_move ^= 1;
+}
+
+void unmake_null() {
+    hist_t hist = game_history[--game_depth];
+    U16 move = hist.move;
+    side_to_move ^= 1;
+    ply--;
+    /* Return board state information */
+    castling_rights = hist_castling(hist.flags);
+    en_passent_legal = hist_ep_legal(hist.flags);
+    en_passent_square = hist_ep_target(hist.flags);
+    fifty_move = hist.fifty_clock;
+    hash = hist.hash;
+}
+
 /* Perft */
 U64 perft(int depth) {
     int n_moves, i,j;
@@ -1379,7 +1440,7 @@ void perft_test(int depth) {
     }
 }
 
-// Depth should be >= 2
+// Depth should be >= 1
 void divide(int depth) {
     int n_moves, i,j;
     U64 nodes=0;

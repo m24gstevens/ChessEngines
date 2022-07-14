@@ -96,6 +96,10 @@ typedef struct {
     U64 hash;
 } hist_t;
 
+// search
+#define VALWINDOW 50
+#define NULLMOVE_R 2
+
 #ifndef M24GC_ENUMS
 #define M24GC_ENUMS
 enum {_FALSE, _TRUE};

@@ -238,6 +238,7 @@ int eval() {
     white_score += white_pieces + white_pawns;
     black_score += black_pieces + black_pawns;
     
+    
     // Other positional evaluation considerations
     white_score += PASSED_PAWN_BONUS * count_white_passed_pawns(bitboards[P], bitboards[p]);
     black_score += PASSED_PAWN_BONUS * count_black_passed_pawns(bitboards[P], bitboards[p]);
