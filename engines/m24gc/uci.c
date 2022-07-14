@@ -14,6 +14,19 @@
 Most of this is forked from BBC by Code Monkey King and VICE by Bluefever Software
 ================================================================================ */
 
+// Initialize timing variables
+void init_times() {
+    quit = 0;
+    movestogo = 30;
+    movetime = -1;
+    _time = -1;
+    inc = 0;
+    starttime = 0;
+    stoptime = 0;
+    timeset = 0;
+    stopped = 0;
+}
+
 // Get time in ms
 int get_time_ms() {
     #ifdef _WIN64
@@ -25,6 +38,67 @@ int get_time_ms() {
     #endif
 }
 
+int input_waiting() {
+    #ifndef _WIN64
+        fd_set readfds;
+        struct timeval tv;
+        FD_ZERO (&readfds);
+        FD_SET (fileno(stdin), &readfds);
+        tv.tv_sec = 0; tv.tv_usec = 0;
+        select(16, &readfds, 0, 0, &tv);
+    #else
+        static int init = 0, pipe;
+        static HANDLE inh;
+        DWORD dw;
+
+        if (!init) {
+            init = 1;
+            inh = GetStdHandle(STD_INPUT_HANDLE);
+            pipe = !GetConsoleMode(inh, &dw);
+            if (!pipe) {
+                SetConsoleMode(inh, dw & ~(ENABLE_MOUSE_INPUT|ENABLE_WINDOW_INPUT));
+                FlushConsoleInputBuffer(inh);
+            }
+        }
+
+        if (pipe) {
+            if (!PeekNamedPipe(inh, NULL, 0, NULL, &dw, NULL)) return 1;
+            return dw;
+        } else {
+            GetNumberOfConsoleInputEvents(inh, &dw);
+            return dw <=1 ? 0 : dw;
+        }
+        #endif
+}
+
+// Read GUI/User input
+void read_input() {
+    int bytes;
+    char input[256] = "", *endc;
+    if (input_waiting()) {
+        stopped = 1;
+        do {
+            bytes = read(fileno(stdin), input, 256);
+        } while (bytes < 0);
+
+        endc = strchr(input, '\n');
+        if (endc) *endc = 0;
+        if (strlen(input) > 0) {
+            if (!strncmp(input, "quit",4))
+                quit = 1;
+            else if (!strncmp(input, "stop", 4))
+                quit = 1;
+        }
+    }
+}
+
+// interact between search and GUI
+void communicate() {
+    if (timeset==1 && get_time_ms() > stoptime) {
+        stopped = 1;
+    }
+    read_input();
+}
 /* Parses a move and returns the move's U16 if exists, _FALSE if not */
 U16 parse_move(char *move_string) {
     int start_count = moves_start_idx[ply];
@@ -93,12 +167,49 @@ void parse_position(char *command) {
 
 // Parse the 'go' command
 void parse_go(char *command) {
-    int depth;
+    int depth = -1;
     char *argument = NULL;
+
+    //infinite search
+    if ((argument = strstr(command, "infinite"))) {}
+    // increment
+    if ((argument = strstr(command, "binc")) && side_to_move == BLACK)
+        inc = atoi(argument + 5);
+    if ((argument = strstr(command, "winc")) && side_to_move == WHITE)
+        inc = atoi(argument + 5);
+    // time command
+    if ((argument = strstr(command, "wtime")) && side_to_move == WHITE) {
+        _time = atoi(argument + 6);
+    }
+    if ((argument = strstr(command, "btime")) && side_to_move == BLACK)
+        _time = atoi(argument + 6);
+    // movestogo command
+    if ((argument = strstr(command, "movestogo")))
+        movestogo = atoi(argument + 10);
+    // movetime command
+    if ((argument = strstr(command, "movetime")))
+        movetime = atoi(argument + 9);
+    // depth command
     if ((argument = strstr(command, "depth")))
         depth = atoi(argument + 6);
-    else
-        depth = 6;
+    // if movetime isn't available
+    if (movetime != -1) {
+        _time = movetime;
+        movestogo = 1;
+    }
+    starttime = get_time_ms();
+    depth = depth;
+    // time control available
+    if (_time != -1) {
+        timeset = 1;
+        _time /= movestogo;
+        _time -= 50;
+        stoptime = starttime + _time + inc;
+    }
+    // no depth available
+    if (depth == -1)
+        depth = 64;
+    printf("time:%d start:%d stop:%d depth %d timeset %d\n", _time, starttime, stoptime, depth, timeset);
     //search
     search(depth);
 }

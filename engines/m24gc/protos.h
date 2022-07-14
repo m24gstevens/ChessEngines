@@ -61,7 +61,7 @@ void print_move_scores();
 
 // UCI
 int get_time_ms();
-void reinit_timing();
+void init_times();
 void communicate();
 
 U16 parse_move(char *);

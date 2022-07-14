@@ -111,6 +111,9 @@ void sort_moves() {
 }
 // Quiescence search
 int quiesce(int alpha, int beta) {
+    // Check up on search
+    if ((nodes & 2047) == 0)
+        communicate();
     pv_length[ply] = ply;
     nodes++;
 
@@ -137,6 +140,9 @@ int quiesce(int alpha, int beta) {
         int score = -quiesce(-beta, -alpha);
         unmake_move();
 
+        // if time is up, return 0
+        if (stopped == 1) return 0;
+
         if (score >= beta) {
             // Fail high
             return beta;
@@ -158,6 +164,8 @@ int quiesce(int alpha, int beta) {
 
 // Negamax with alpha-beta search
 int negamax(int depth, int alpha, int beta) {
+    if ((nodes & 2047) == 0)
+        communicate();
     int found_pv = 0;
     // initialize PV length
     pv_length[ply] = ply;
@@ -202,6 +210,9 @@ int negamax(int depth, int alpha, int beta) {
         }
         unmake_move();
 
+        // return 0 if time is up
+        if (stopped == 1) return 0;
+
         if (score >= beta) {
             if (!(move_flags(move) & 0x4)) {
                 // Store killer moves
@@ -242,12 +253,15 @@ void search(int depth) {
     //iterative deepening
     prepare_search();
     // reset "time is up" flag
+    stopped = 0;
     follow_pv = 0;
 
     for (int current_depth = 1; current_depth <= depth; current_depth++) {
         // if time is up
+        if (stopped == 1)
+            break;
         follow_pv = 1;
-        score = negamax(current_depth,-300000,300000);
+        score = negamax(current_depth,-50000,50000);
         printf("info score cp %d depth %d nodes %lld pv ",score,current_depth,nodes);
         print_pv();
         printf("\n");

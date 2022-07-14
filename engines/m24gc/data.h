@@ -40,3 +40,13 @@ extern U64 nodes;
 extern char *starting_position;
 extern char *kiwipete;
 extern char *cmk_position;
+
+extern int quit;
+extern int movestogo;
+extern int movetime;
+extern int _time;
+extern int inc;
+extern int starttime;
+extern int stoptime;
+extern int timeset;
+extern int stopped;

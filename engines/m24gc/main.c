@@ -18,11 +18,12 @@ void init_all() {
 
 
 int main() {
-    int debug = 1;
+    int debug = 0;
     init_all();
+    init_times();
     if (debug) {
-        parse_fen(kiwipete);
-        search(6);
+        parse_fen(starting_position);
+        parse_go("go wtime 30000");
     } else {
         uci();
     }
