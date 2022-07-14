@@ -45,6 +45,9 @@ int make_move(U16);
 int make_capture(U16);
 void unmake_move();
 
+void make_null();
+void unmake_null();
+
 void perft_test(int);
 void divide(int);
 

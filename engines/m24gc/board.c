@@ -1350,6 +1350,35 @@ int make_capture(U16 move) {
     return _FALSE;
 }
 
+// Null "Passing" moves
+void make_null() {
+    /* Save irreversible information to stack */
+    U16 data = encode_hist(0,castling_rights, en_passent_legal, en_passent_square);
+    game_history[game_depth].move = 0;
+    game_history[game_depth].flags = data;
+    game_history[game_depth].fifty_clock = fifty_move;
+    game_history[game_depth].hash = hash;
+    moves_start_idx[ply + 1] = moves_start_idx[ply];
+    /* Update board state, including hash */
+    game_depth++;
+    ply++;
+    en_passent_legal = _FALSE;
+    side_to_move ^= 1;
+}
+
+void unmake_null() {
+    hist_t hist = game_history[--game_depth];
+    U16 move = hist.move;
+    side_to_move ^= 1;
+    ply--;
+    /* Return board state information */
+    castling_rights = hist_castling(hist.flags);
+    en_passent_legal = hist_ep_legal(hist.flags);
+    en_passent_square = hist_ep_target(hist.flags);
+    fifty_move = hist.fifty_clock;
+    hash = hist.hash;
+}
+
 /* Perft */
 U64 perft(int depth) {
     int n_moves, i,j;

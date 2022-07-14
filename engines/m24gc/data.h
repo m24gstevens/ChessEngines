@@ -19,6 +19,7 @@ extern int side_to_move;
 extern int castling_rights;
 extern int en_passent_legal;
 extern int en_passent_square;
+
 extern int ply;
 extern int game_depth;
 extern int fifty_move;

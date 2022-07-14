@@ -23,7 +23,7 @@ int main() {
     init_times();
     if (debug) {
         parse_fen(starting_position);
-        parse_go("go wtime 30000");
+        parse_go("go infinite");
     } else {
         uci();
     }
