@@ -162,7 +162,7 @@ static inline int eval_king(int side, int opponent_material) {
             U64 open_files = ~fileFill(bitboards[p] | bitboards[P]);
             score -= popcount(king_bb & open_files) * 40;
         }
-        return score + king_midgame_pstable[(side_to_move ? FLIP(king_square) : king_square)];
+        return king_midgame_pstable[(side_to_move ? FLIP(king_square) : king_square)]; //score + 
     } else {
         // Endgame
         return king_endgame_pstable[king_square];
@@ -217,8 +217,8 @@ int eval() {
     }
 
     // Evaluate king activity and safety based on piece material
-    //white_score += eval_king(WHITE, black_pieces);
-    //black_score += eval_king(BLACK, white_pieces);
+    white_score += eval_king(WHITE, black_pieces);
+    black_score += eval_king(BLACK, white_pieces);
 
     // Piece square tables for pawns
     bitboard = bitboards[P];

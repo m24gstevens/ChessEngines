@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS = -g -O3
+CFLAGS = -g
 DEPS = data.h defs.h protos.h
 OBJ = main.o bitboards.o board.o uci.o eval.o search.o data.o tt.o
 

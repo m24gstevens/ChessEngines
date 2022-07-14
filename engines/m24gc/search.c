@@ -237,10 +237,10 @@ int negamax(int depth, int alpha, int beta) {
             // Principal variation search PVS
             if (score > alpha) {
                 score = -negamax(depth - 1, -alpha-1, -alpha);
+                // if LMR fails, search with a full depth on the original alpha-beta bounds
+                if ((score > alpha) && (score < beta))
+                    score = -negamax(depth - 1, -beta, -alpha);
             }
-            // if LMR fails, search with a full depth on the original alpha-beta bounds
-            if ((score > alpha) && (score < beta))
-                score = -negamax(depth - 1, -beta, -alpha);
         }
         unmake_move();
         moves_searched++;
@@ -281,7 +281,7 @@ int negamax(int depth, int alpha, int beta) {
     }
     if (legal_moves == 0) {
         if (checked)
-            return -49000 + ply;
+            return -MATE_VALUE + ply;
         else
             return 0;
     }
@@ -294,12 +294,10 @@ void search(int depth) {
     int score;
     int alpha, beta;
     // Initial alpha beta bounds
-    alpha = -50000;
-    beta = 50000;
+    alpha = -INFINITY;
+    beta = INFINITY;
     //iterative deepening
     prepare_search();
-    // clear hash table
-    clear_hash();
     // reset "time is up" flag
     stopped = 0;
 
@@ -312,8 +310,8 @@ void search(int depth) {
 
         if ((score <= alpha) || (score >= beta)) {
             // Fell outside the window; try again with a full-width window, same depth
-            alpha = -50000;
-            beta = 50000;
+            alpha = -INFINITY;
+            beta = INFINITY;
             score = negamax(current_depth,alpha,beta);
         }
         alpha = score - VALWINDOW;

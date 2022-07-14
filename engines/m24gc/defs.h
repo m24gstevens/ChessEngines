@@ -62,6 +62,11 @@ typedef uint32_t U32;
 typedef uint16_t U16;
 #define C64(constantU64) constantU64##ULL
 
+#define INFINITY 50000
+
+#define MATE_VALUE 49000
+#define MATE_THRESHOLD 48000
+
 #define MAX_PLY 64
 #define STACK_SIZE 16000
 #define MAX_HIST 500

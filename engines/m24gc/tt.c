@@ -74,11 +74,16 @@ int probe_hash(int depth, int alpha, int beta) {
     if (phash->key == hash) {
         // Found a match
         if (phash->depth >= depth) {
+            int score = phash->score;
+
+            if (score < -MATE_THRESHOLD) score += ply;
+            if (score > MATE_THRESHOLD) score -= ply;
+
             if (phash->flags == HASH_FLAG_EXACT)
-                return phash->score;
-            if ((phash->flags == HASH_FLAG_ALPHA) && (phash->score <= alpha))
+                return score;
+            if ((phash->flags == HASH_FLAG_ALPHA) && (score <= alpha))
                 return alpha;
-            if ((phash->flags == HASH_FLAG_BETA) && (phash->score >= beta))
+            if ((phash->flags == HASH_FLAG_BETA) && (score >= beta))
                 return beta;
         }
     }
@@ -87,6 +92,11 @@ int probe_hash(int depth, int alpha, int beta) {
 
 void record_hash(int depth, int score, int hash_flag) {
     hash_t *phash = &hash_table[hash % HASH_SIZE];
+
+    // Adjust for mating scores, as now we will make them independent of a position
+    if (score < -MATE_THRESHOLD) score -= ply;
+    if (score > MATE_THRESHOLD) score += ply;
+
     phash->key = hash;
     phash->score = score;
     phash->flags = hash_flag;
