@@ -168,6 +168,14 @@ const int reduction_limit = 3;
 
 // Negamax with alpha-beta search
 int negamax(int depth, int alpha, int beta) {
+    int score;
+
+    int hash_flag = HASH_FLAG_ALPHA;
+
+    // check if we have already searched this node by a tt lookup
+    if (ply && (score = probe_hash(depth, alpha, beta)) != NO_HASH_ENTRY)
+        return score;
+
     if ((nodes & 2047) == 0)
         communicate();
 
@@ -183,7 +191,7 @@ int negamax(int depth, int alpha, int beta) {
     nodes++;
 
     int legal_moves = 0;
-    int score;
+    
     U16 move;
     // If we are in check, search deeper
     int checked = in_check(side_to_move);
@@ -239,16 +247,10 @@ int negamax(int depth, int alpha, int beta) {
         // return 0 if time is up
         if (stopped == 1) return 0;
 
-        if (score >= beta) {
-            if (!(move_flags(move) & 0x4)) {
-                // Store killer moves
-                killer_moves[1][ply] = killer_moves[0][ply];
-                killer_moves[0][ply] = move;
-            }
-            // Fail high
-            return beta;
-        }
         if (score > alpha) {
+            // store hash entry with flag of PV
+            hash_flag = HASH_FLAG_EXACT;
+            record_hash(score, depth, hash_flag);
             // store history move
             if (!(move_flags(move) & 0x4)) 
                 history_moves[piece_on_square[move_source(move)]][move_target(move)] += depth;
@@ -262,6 +264,20 @@ int negamax(int depth, int alpha, int beta) {
             // adjust PV length
             pv_length[ply] = pv_length[ply + 1];
         }
+
+        if (score >= beta) {
+            // store hash entry with flag of beta cutoff
+            record_hash(beta, depth, HASH_FLAG_BETA);
+
+            if (!(move_flags(move) & 0x4)) {
+                // Store killer moves
+                killer_moves[1][ply] = killer_moves[0][ply];
+                killer_moves[0][ply] = move;
+            }
+            // Fail high
+            return beta;
+        }
+
     }
     if (legal_moves == 0) {
         if (checked)
@@ -270,6 +286,7 @@ int negamax(int depth, int alpha, int beta) {
             return 0;
     }
     // Fail low
+    record_hash(depth, alpha, hash_flag);
     return alpha;
 }
 
@@ -281,6 +298,8 @@ void search(int depth) {
     beta = 50000;
     //iterative deepening
     prepare_search();
+    // clear hash table
+    clear_hash();
     // reset "time is up" flag
     stopped = 0;
 

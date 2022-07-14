@@ -241,12 +241,14 @@ void uci() {
         else if (strncmp(input, "position", 8) == 0) {
             parse_position(input);
             // clear hash table
+            clear_hash();
         }
         
         // "ucinewgame" command
         else if (strncmp(input, "ucinewgame", 10) == 0) {
             parse_position("position startpos");
             //clear hash table
+            clear_hash();
         }
         
         // "ucigo" command
