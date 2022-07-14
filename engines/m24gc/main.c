@@ -23,9 +23,8 @@ int main() {
     init_all();
     init_times();
     if (debug) {
-        parse_fen(kiwipete);
-        test_hash(4);
-        printf("Done\n");
+        parse_fen(headache_position);
+        search(9);
     } else {
         uci();
     }

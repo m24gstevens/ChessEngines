@@ -57,3 +57,38 @@ void test_hash(int depth) {
         unmake_move();
     }
 }
+
+void clear_hash() {
+    for (int index = 0; index < HASH_SIZE; index++) {
+        hash_t entry = hash_table[index];
+        entry.key = C64(0);
+        entry.depth = 0;
+        entry.flags = 0;
+        entry.score = 0;
+    }
+}
+
+int probe_hash(int depth, int alpha, int beta) {
+    // Lookup
+    hash_t *phash = &hash_table[hash % HASH_SIZE];
+    if (phash->key == hash) {
+        // Found a match
+        if (phash->depth >= depth) {
+            if (phash->flags == HASH_FLAG_EXACT)
+                return phash->score;
+            if ((phash->flags == HASH_FLAG_ALPHA) && (phash->score <= alpha))
+                return alpha;
+            if ((phash->flags == HASH_FLAG_BETA) && (phash->score >= beta))
+                return beta;
+        }
+    }
+    return NO_HASH_ENTRY;
+}
+
+void record_hash(int depth, int score, int hash_flag) {
+    hash_t *phash = &hash_table[hash % HASH_SIZE];
+    phash->key = hash;
+    phash->score = score;
+    phash->flags = hash_flag;
+    phash->depth = depth;
+}

@@ -77,18 +77,13 @@ U64 nodes;
 
 // Transposition table
 
-// Hash keys
-//random piece keys
+//random keys
 U64 piece_keys[13][64];
-
-// random enpassent keys
 U64 en_passent_keys[64];
-
-// random castling keys
 U64 castle_keys[16];
-
-// random side key
 U64 side_key;
+
+hash_t hash_table[HASH_SIZE];
 
 // UCI
 char *starting_position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

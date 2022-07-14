@@ -1394,12 +1394,17 @@ void make_null() {
     /* Update board state, including hash */
     game_depth++;
     ply++;
+    // Hash stuff
+    if (en_passent_legal)
+        hash ^= en_passent_keys[en_passent_square];
+    hash ^= side_key;
     en_passent_legal = _FALSE;
     side_to_move ^= 1;
 }
 
 void unmake_null() {
     hist_t hist = game_history[--game_depth];
+    hash = hist.hash;
     U16 move = hist.move;
     side_to_move ^= 1;
     ply--;

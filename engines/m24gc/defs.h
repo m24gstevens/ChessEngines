@@ -65,6 +65,22 @@ typedef uint16_t U16;
 #define MAX_PLY 64
 #define STACK_SIZE 16000
 #define MAX_HIST 500
+#define HASH_SIZE 0x400000
+
+// tt flags
+#define HASH_FLAG_EXACT 0
+#define HASH_FLAG_ALPHA 1
+#define HASH_FLAG_BETA 2
+
+#define NO_HASH_ENTRY 100000
+
+// tt data structure
+typedef struct {
+    U64 key;       // hashed key
+    int depth;      // current search depth
+    int flags;      // type of node as a tt flag - Fail high (beta), Fail low (alpha), or PV
+    int score;      // score of the node within a search
+} hash_t;
 
 /* pseudo-random number generator for magic bitboards */
 typedef struct {

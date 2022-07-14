@@ -69,6 +69,10 @@ void init_random_keys();
 U64 generate_hash();
 void test_hash(int);
 
+void clear_hash();
+int probe_hash(int, int, int);
+void record_hash(int, int, int);
+
 // UCI
 int get_time_ms();
 void init_times();

@@ -217,8 +217,8 @@ int eval() {
     }
 
     // Evaluate king activity and safety based on piece material
-    white_score += eval_king(WHITE, black_pieces);
-    black_score += eval_king(BLACK, white_pieces);
+    //white_score += eval_king(WHITE, black_pieces);
+    //black_score += eval_king(BLACK, white_pieces);
 
     // Piece square tables for pawns
     bitboard = bitboards[P];
