@@ -40,6 +40,7 @@ void print_move_stack(int);
 
 int is_square_attacked(int, int);
 int in_check(int);
+int reps();
 void generate_moves();
 void generate_captures();
  
@@ -64,6 +65,8 @@ int eval();
 void search(int);
 void print_move_scores();
 
+int eval_king(int, int);
+
 // Transposition table
 void init_random_keys();
 U64 generate_hash();
@@ -85,4 +88,6 @@ void uci();
 
 // main
 void prepare_search();
+void clear_move_stack();
+void clear_history();
 void init_all();

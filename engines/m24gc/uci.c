@@ -74,11 +74,11 @@ int input_waiting() {
 // Read GUI/User input
 void read_input() {
     int bytes;
-    char input[256] = "", *endc;
+    char input[2000] = "", *endc;
     if (input_waiting()) {
         stopped = 1;
         do {
-            bytes = read(fileno(stdin), input, 256);
+            bytes = fread(input,1,2000,stdin);
         } while (bytes < 0);
 
         endc = strchr(input, '\n');
@@ -101,11 +101,10 @@ void communicate() {
 }
 /* Parses a move and returns the move's U16 if exists, _FALSE if not */
 U16 parse_move(char *move_string) {
-    int start_count = moves_start_idx[ply];
     int start_square = 8*(move_string[1] - '1') + move_string[0] - 'a';
     int end_square = 8*(move_string[3] - '1') + move_string[2] - 'a';
     generate_moves();
-    for (int i=0; i<move_stack.count;i++) {
+    for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1];i++) {
         U16 move = move_stack.moves[i].move;
         if ((move_source(move) == start_square) && (move_target(move) == end_square)) {
             /* Might make the move */
@@ -125,6 +124,8 @@ U16 parse_move(char *move_string) {
 
 /* Parses a position given a "position" UCI command */
 void parse_position(char *command) {
+    // Clear the history
+    clear_history();
     /* Jump over "position " */
     char *current_command = command;
     command += 9;
@@ -152,16 +153,17 @@ void parse_position(char *command) {
             if (*current_command == '\n')
                 break;
             U16 move = parse_move(current_command);
-            prepare_search();
-            if (move) {
-                make_move(move);
-                /* Find the next token */
-                while (*current_command && *current_command != ' ') current_command++;
-                current_command++;
-            } else
+            if (move == _FALSE)
                 break;
+            make_move(move);
+            ply = 0;
+            /* Find the next token */
+            while (*current_command && *current_command != ' ') current_command++;
+            current_command++;
          }
     }
+    print_board();
+    clear_move_stack();
     return;
 }
 

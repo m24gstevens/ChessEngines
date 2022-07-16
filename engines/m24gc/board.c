@@ -75,6 +75,8 @@ void parse_fen(char *fen) {
     } else
         en_passent_legal = 0;
 
+    /* Fifty move clock */
+    fifty_move = atoi(fen + 2);
     /* occupancies */
     for (int i=0; i<6; i++) {
         occupancies[WHITE] |= bitboards[i];
@@ -82,7 +84,7 @@ void parse_fen(char *fen) {
     }
     occupancies[BOTH] = occupancies[WHITE] | occupancies[BLACK];
 
-    hash = generate_hash();    
+    hash = generate_hash();  
 }
  
 /* =================================
@@ -141,7 +143,23 @@ void print_move_history(int ply) {
 }
 
 void add_move(U16 data) {
+    if (moves_start_idx[ply+1] >= STACK_SIZE) {
+        printf("AAAAAAAAAAAAAA\n");
+        raise(SIGSEGV);
+    }
     move_stack.moves[moves_start_idx[ply+1]++].move = data;
+}
+
+
+// Returns the number of repetitions of the current position
+int reps() {
+    int i;
+    int r=0;
+    for (i = ((hply < fifty_move) ? 0 : hply - fifty_move); i < hply; i++) {
+        if (game_history[i].hash == hash)
+            r++;
+    }
+    return r;
 }
 
 // Constants for pawn promotion
@@ -1208,11 +1226,11 @@ int make_move(U16 move) {
     U64 from_to_bb = ((U64)1 << move_from) | ((U64)1 << move_to);
     /* Save irreversible information to stack */
     U16 data = encode_hist(((flags == 5) ? (p - 6*side_to_move) : piece_on_square[move_to]),castling_rights, en_passent_legal, en_passent_square);
-    game_history[game_depth].move = move;
-    game_history[game_depth].flags = data;
-    game_history[game_depth].fifty_clock = fifty_move;
-    game_history[game_depth].hash = hash;
-    game_depth++;
+    game_history[hply].move = move;
+    game_history[hply].flags = data;
+    game_history[hply].fifty_clock = fifty_move;
+    game_history[hply].hash = hash;
+    hply++;
     ply++;
     /* Update the bitboards and 8x8 board */
     int taken_piece = piece_on_square[move_to];
@@ -1297,15 +1315,27 @@ int make_move(U16 move) {
     castling_rights &= castling_rights_update[move_from];
     castling_rights &= castling_rights_update[move_to];
     hash ^= castle_keys[castling_rights];
+    // Fifty move
+    if ((flags & 0x4) || (moved_piece == P) || (moved_piece == p))
+        fifty_move = 0;
+    else
+        fifty_move++;
     // King is never left in check, so don't need to unmake ever
     if (hash != generate_hash()) {
         printf("Trouble updating with move flags %d\n", move_flags(move));
+        printf("Move: ");
+        print_move(move);
+        printf("\n");
+        printf("Move stack: ");
+        print_move_history(ply);
+        print_board();
+        raise(SIGSEGV);
     }
     return _TRUE;
 }
 
 void unmake_move() {
-    hist_t hist = game_history[--game_depth];
+    hist_t hist = game_history[--hply];
     U16 move = hist.move;
     char flags = move_flags(move);
     char move_from, move_to;
@@ -1386,13 +1416,13 @@ int make_capture(U16 move) {
 void make_null() {
     /* Save irreversible information to stack */
     U16 data = encode_hist(0,castling_rights, en_passent_legal, en_passent_square);
-    game_history[game_depth].move = 0;
-    game_history[game_depth].flags = data;
-    game_history[game_depth].fifty_clock = fifty_move;
-    game_history[game_depth].hash = hash;
+    game_history[hply].move = 0;
+    game_history[hply].flags = data;
+    game_history[hply].fifty_clock = fifty_move;
+    game_history[hply].hash = hash;
     moves_start_idx[ply + 1] = moves_start_idx[ply];
     /* Update board state, including hash */
-    game_depth++;
+    hply++;
     ply++;
     // Hash stuff
     if (en_passent_legal)
@@ -1403,7 +1433,7 @@ void make_null() {
 }
 
 void unmake_null() {
-    hist_t hist = game_history[--game_depth];
+    hist_t hist = game_history[--hply];
     hash = hist.hash;
     U16 move = hist.move;
     side_to_move ^= 1;
@@ -1454,7 +1484,7 @@ void divide(int depth) {
         make_move(move_stack.moves[i].move);
         nodes = perft(depth - 1);
         print_move(move_stack.moves[i].move);
-        printf(" %lld\n", nodes);
+        printf(" %lld code %d\n", nodes, move_stack.moves[i].move);
         unmake_move();
     }
 }

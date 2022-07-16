@@ -21,9 +21,12 @@ extern int en_passent_legal;
 extern int en_passent_square;
 
 extern int ply;
-extern int game_depth;
+extern int hply;
 extern int fifty_move;
 extern U64 hash;
+
+extern U64 repetition_table[MAX_HIST];
+extern int repetition_index;
 
 extern char *piece_characters;
 extern char char_to_piece_code[];
@@ -33,7 +36,7 @@ extern char *square_strings[64];
 extern char *promoted_pieces;
 
 extern _move_list move_stack;
-extern int moves_start_idx[MAX_PLY];
+extern int moves_start_idx[MAX_HIST];
 extern hist_t game_history[MAX_HIST];
 
 extern U64 nodes;
@@ -49,6 +52,7 @@ extern char *starting_position;
 extern char *kiwipete;
 extern char *cmk_position;
 extern char *headache_position;
+extern char *repetitions;
 
 extern int quit;
 extern int movestogo;

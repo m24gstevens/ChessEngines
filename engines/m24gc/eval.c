@@ -72,6 +72,8 @@ int bishop_pstable[64] =
 -10, -10, -10, -10, -10, -10, -10, -10
 };
 
+int passed_pawns_bonuses[8] = {0, 10, 20, 30, 40, 50, 60, 70};
+
 // Constants for evaluation
 static const U64 firstRank = C64(0xFF);
 static const U64 lastRank = C64(0xFF00000000000000);
@@ -114,18 +116,16 @@ static inline int count_doubled_pawns(U64 pawn_mask) {
     return popcount(mask);
 }
 
-static inline int count_white_passed_pawns(U64 wpawns, U64 bpawns) {
-    U64 black_pawn_fill = southFill(bpawns);
-    U64 black_pawn_guard = southOne(eastOne(black_pawn_fill) | westOne(black_pawn_fill));
-    U64 passed_pawns = wpawns & ~black_pawn_guard;
-    return popcount(passed_pawns);
+static inline U64 white_passed_pawns(U64 wpawns, U64 bpawns) {
+    U64 black_pawn_spans = southOne(southFill(bpawns));
+    black_pawn_spans |= eastOne(black_pawn_spans) | westOne(black_pawn_spans);
+    return wpawns & ~black_pawn_spans;
 }
 
-static inline int count_black_passed_pawns(U64 wpawns, U64 bpawns) {
-    U64 white_pawn_fill = northFill(bpawns);
-    U64 white_pawn_guard = northOne(eastOne(white_pawn_fill) | westOne(white_pawn_fill));
-    U64 passed_pawns = bpawns & ~white_pawn_guard;
-    return popcount(passed_pawns);
+static inline U64 black_passed_pawns(U64 wpawns, U64 bpawns) {
+    U64 white_pawn_spans = northOne(northFill(wpawns));
+    white_pawn_spans |= eastOne(white_pawn_spans) | westOne(white_pawn_spans);
+    return bpawns & ~white_pawn_spans;
 }
 
 static inline int count_white_backward_pawns(U64 wpawns) {
@@ -142,15 +142,14 @@ static inline int count_black_backward_pawns(U64 bpawns) {
     return popcount(bpawns); 
 }
 
-static inline int eval_king(int side, int opponent_material) {
-    int score=0;
+int eval_king(int side, int opponent_material) {
     U64 king_bb = bitboards[K + 6*side_to_move];
     int king_square = bitscanForward(king_bb);
     if (opponent_material >= 1400) {
         // Evaluate the positioning in the middlegame
         U64 pawn_bb = bitboards[P + 6*side_to_move];
         U64 our_side = side_to_move ? ~white_half : white_half;
-        int score;
+        int score = 0;
         if (king_bb && kingside) {
             pawn_bb &= kingside & our_side;
             score += (-120 + 40 * popcount(pawn_bb));
@@ -162,6 +161,12 @@ static inline int eval_king(int side, int opponent_material) {
             U64 open_files = ~fileFill(bitboards[p] | bitboards[P]);
             score -= popcount(king_bb & open_files) * 40;
         }
+        if (score < -120) {
+            printf("Evaluation error!: Score %d\n", score);
+            raise(SIGSEGV);
+        }
+        score *= opponent_material;
+        score /= 3100;
         return score + king_midgame_pstable[(side_to_move ? FLIP(king_square) : king_square)];
     } else {
         // Endgame
@@ -217,8 +222,8 @@ int eval() {
     }
 
     // Evaluate king activity and safety based on piece material
-    //white_score += eval_king(WHITE, black_pieces);
-    //black_score += eval_king(BLACK, white_pieces);
+    white_score += eval_king(WHITE, black_pieces);
+    black_score += eval_king(BLACK, white_pieces);
 
     // Piece square tables for pawns
     bitboard = bitboards[P];
@@ -238,10 +243,20 @@ int eval() {
     white_score += white_pieces + white_pawns;
     black_score += black_pieces + black_pawns;
     
-    
+    U64 passers;
     // Other positional evaluation considerations
-    white_score += PASSED_PAWN_BONUS * count_white_passed_pawns(bitboards[P], bitboards[p]);
-    black_score += PASSED_PAWN_BONUS * count_black_passed_pawns(bitboards[P], bitboards[p]);
+    passers = white_passed_pawns(bitboards[P], bitboards[p]);
+    while (passers) {
+        sq = bitscanForward(passers);
+        clear_ls1b(passers);
+        white_score += passed_pawns_bonuses[sq >> 3];   // Additional bonus by rank
+    }
+    passers = black_passed_pawns(bitboards[P], bitboards[p]);
+    while (passers) {
+        sq = bitscanForward(passers);
+        clear_ls1b(passers);
+        black_score += passed_pawns_bonuses[7 - (sq >> 3)];   
+    }
 
     white_score -= ISOLATED_PAWN_PENALTY * count_isolated_pawns(bitboards[P]);
     black_score -= ISOLATED_PAWN_PENALTY * count_isolated_pawns(bitboards[p]);

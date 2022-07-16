@@ -170,6 +170,11 @@ const int reduction_limit = 3;
 int negamax(int depth, int alpha, int beta) {
     int score;
 
+    // Check the number of repetitions. If we have repeated the position before, and we aren't at the root,
+    // We can assume that the position is a draw (If one side has better, it will be cutoff
+    if (ply && reps())
+        return 0;
+
     int hash_flag = HASH_FLAG_ALPHA;
 
     // check if we have already searched this node by a tt lookup
@@ -285,6 +290,9 @@ int negamax(int depth, int alpha, int beta) {
         else
             return 0;
     }
+    // Fifty move rule draw
+	if (fifty_move >= 100)
+		return 0;
     // Fail low
     record_hash(depth, alpha, hash_flag);
     return alpha;
@@ -296,10 +304,9 @@ void search(int depth) {
     // Initial alpha beta bounds
     alpha = -50000;
     beta = 50000;
-    //iterative deepening
-    prepare_search();
-    // clear hash table
-    clear_hash();
+    //Prepare the search
+    nodes=0;
+    clear_tables();
     // reset "time is up" flag
     stopped = 0;
 
@@ -322,8 +329,9 @@ void search(int depth) {
         print_pv();
         printf("\n");
     }
+    ply = 0;
     printf("bestmove ");
     print_move(pv_table[0][0]);
     printf("\n");
-
+    return;
 }
