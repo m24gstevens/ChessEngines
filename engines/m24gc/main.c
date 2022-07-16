@@ -49,9 +49,7 @@ int main() {
     init_all();
     init_times();
     if (debug) {
-        parse_fen("rnbq1bnr/pp2pkpp/8/2pp4/8/4P3/PPPP1PPP/RNB1KBNR w KQ - 0 1");
-        printf("Black king: %d\n", eval_king(BLACK, 2200));
-        printf("White king: %d\n", eval_king(WHITE, 3100));
+        parse_fen("rn2kbnr/ppp1pppp/8/8/8/7b/PPPPPPB1/R1BQK1NR w KQkq - 0 5");
         //printf("%d\n", eval());
     } else {
         uci();

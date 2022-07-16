@@ -67,6 +67,8 @@ void print_move_scores();
 
 int eval_king(int, int);
 
+U64 fileFill(U64);
+
 // Transposition table
 void init_random_keys();
 U64 generate_hash();

@@ -100,7 +100,7 @@ static inline U64 southFill(U64 bb) {
     bb |= (bb >> 32);
     return bb;
 }
-static inline U64 fileFill(U64 bb) {
+U64 fileFill(U64 bb) {
     return northFill(bb) | southFill(bb);
 }
 
@@ -143,34 +143,39 @@ static inline int count_black_backward_pawns(U64 bpawns) {
 }
 
 int eval_king(int side, int opponent_material) {
-    U64 king_bb = bitboards[K + 6*side_to_move];
+    U64 kingExposed = 0;
+    int branch = 0;
+    U64 king_bb = bitboards[K + 6*side];
     int king_square = bitscanForward(king_bb);
+    int score = 0;
+    // King cutting the rooks connection penalty
+    if (popcount(rookAttacks(king_square,0) & (firstRank << (king_square & 56)) & bitboards[R + 6*side]) == 2)
+        score -= 50;
     if (opponent_material >= 1400) {
         // Evaluate the positioning in the middlegame
-        U64 pawn_bb = bitboards[P + 6*side_to_move];
-        U64 our_side = side_to_move ? ~white_half : white_half;
-        int score = 0;
-        if (king_bb && kingside) {
+        U64 pawn_bb = bitboards[P + 6*side];
+        U64 our_side = side ? ~white_half : white_half;
+        if (king_bb & eastOne(kingside)) {
+            // Only g and h files, i.e. castled kingside
             pawn_bb &= kingside & our_side;
             score += (-120 + 40 * popcount(pawn_bb));
-        } else if (king_bb && queenside) {
+        } else if (king_bb & queenside) {
+            branch = 1;
             pawn_bb &= queenside & our_side;
             score += (-120 + 40 * popcount(pawn_bb));
         } else {
             // Penalty for open files near the king
+            branch = 2;
             U64 open_files = ~fileFill(bitboards[p] | bitboards[P]);
-            score -= popcount(king_bb & open_files) * 40;
-        }
-        if (score < -120) {
-            printf("Evaluation error!: Score %d\n", score);
-            raise(SIGSEGV);
+            kingExposed = ((king_bb) | westOne(king_bb) | eastOne(king_bb) ) & open_files;
+            score -= popcount(((king_bb) | westOne(king_bb) | eastOne(king_bb) ) & open_files) * 40;
         }
         score *= opponent_material;
         score /= 3100;
-        return score + king_midgame_pstable[(side_to_move ? FLIP(king_square) : king_square)];
+        return score + king_midgame_pstable[(side ? FLIP(king_square) : king_square)];
     } else {
         // Endgame
-        return king_endgame_pstable[king_square];
+        return score + king_endgame_pstable[king_square];
     }
 }
 
@@ -181,16 +186,26 @@ int eval() {
     int white_pawns=0, black_pawns=0;
     U64 bitboard;
     int i, sq;
-    //Material scores for rooks and queens
-    white_pieces += popcount(bitboards[Q]) * 900;
-    black_pieces += popcount(bitboards[q]) * 900;
+    //Material scores for rooks
     white_pieces += popcount(bitboards[R]) * 500;
     black_pieces += popcount(bitboards[r]) * 500;
-    // Temporary measure
-    if (bitboards[Q] && ((U64)1 << d1))
-        white_score += 100;
-    if (bitboards[q] && ((U64)1 << d8))
-        black_score += 100;
+    // Queens 
+    bitboard = bitboards[Q];
+    while (bitboard) {
+        sq = bitscanForward(bitboard);
+        clear_ls1b(bitboard);
+        white_pieces += 900;
+        // Mobility bonus
+        white_score += popcount(queenAttacks(sq, occupancies[BOTH]));
+    }
+    bitboard = bitboards[q];
+    while (bitboard) {
+        sq = bitscanForward(bitboard);
+        clear_ls1b(bitboard);
+        black_pieces += 900;
+        // Mobility bonus
+        black_score += popcount(queenAttacks(sq, occupancies[BOTH]));
+    }
     //Piece square tables and material scores for knights and bishops
     bitboard = bitboards[N];
     while (bitboard) {
@@ -212,6 +227,8 @@ int eval() {
         clear_ls1b(bitboard);
         white_score += knight_pstable[sq];
         white_pieces += 330;
+        // Mobility bonus
+        white_score += popcount(bishopAttacks(sq, occupancies[BOTH]));
     }
     bitboard = bitboards[b];
     while (bitboard) {
@@ -219,6 +236,8 @@ int eval() {
         clear_ls1b(bitboard);
         black_score += knight_pstable[sq];
         black_pieces += 330;
+        // Mobility bonus
+        black_score += popcount(bishopAttacks(sq, occupancies[BOTH]));
     }
 
     // Evaluate king activity and safety based on piece material
@@ -282,7 +301,8 @@ int eval() {
 
     // Undeveloped penalty
     white_score -= popcount((bitboards[N] | bitboards[B]) & firstRank) * UNDEVELOPED_PIECE_PENALTY;
-    black_score -= popcount((bitboards[n] | bitboards[b]) & lastRank) * UNDEVELOPED_PIECE_PENALTY; 
+    black_score -= popcount((bitboards[n] | bitboards[b]) & lastRank) * UNDEVELOPED_PIECE_PENALTY;
+
 
     if (side_to_move) 
         return black_score - white_score;

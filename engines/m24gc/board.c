@@ -524,7 +524,7 @@ void generate_check(U64 checkers) {
             /* En Passent */
             if (en_passent_legal) {
                 int target = en_passent_square;
-                bitboard = pawn_attack_table[BLACK][en_passent_square] & bitboards[P] & checkmask;
+                bitboard = pawn_attack_table[BLACK][en_passent_square] & bitboards[P] & (westOne(checkmask) | eastOne(checkmask));
                 while (bitboard) {
                     source = bitscanForward(bitboard);
                     clear_ls1b(bitboard);
@@ -686,7 +686,9 @@ void generate_check(U64 checkers) {
             /* En Passent */
             if (en_passent_legal) {
                 int target = en_passent_square;
-                bitboard = pawn_attack_table[WHITE][en_passent_square] & bitboards[p] & checkmask;
+                bitboard = pawn_attack_table[WHITE][en_passent_square] & bitboards[p] & (westOne(checkmask) | eastOne(checkmask)); 
+                printf("bitboard\n");
+                print_bitboard(bitboard);
                 while (bitboard) {
                     source = bitscanForward(bitboard);
                     clear_ls1b(bitboard);
