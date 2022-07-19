@@ -317,73 +317,62 @@ int eval(int alpha, int beta) {
 
 // Static exchange evaluation
 
-// Gets the smallest value attacker
-static inline U64 get_smallest_attacker(int sq, int side) {
-    U64 attackers;
-    U64 bb = (U64)1 << sq;
-    attackers = pawn_attack_table[1 ^ side][sq] & bitboards[P + 6*side];
-    if (attackers) return (attackers & -attackers);
-    attackers = knight_attack_table[sq] & bitboards[N + 6*side];
-    if (attackers) return (attackers & -attackers);
-    attackers = bishopAttacks(sq, occupancies[BOTH]) & bitboards[B + 6 * side];
-    if (attackers) return (attackers & -attackers);
-    attackers = rookAttacks(sq, occupancies[BOTH]) & bitboards[R + 6 * side];
-    if (attackers) return (attackers & -attackers);
-    attackers = queenAttacks(sq, occupancies[BOTH]) & bitboards[Q + 6 * side];
-    if (attackers) return (attackers & -attackers);
-    attackers = king_attack_table[sq] & bitboards[K + 6*side];
-    if (attackers) return (attackers & -attackers);
-    return C64(0);
+// Mask of pieces that directly attack a given square
+static inline U64 attacks_to(int target) {
+    U64 occ = occupancies[BOTH];
+    U64 attacks = (pawn_attack_table[WHITE][target] & bitboards[p]) | (pawn_attack_table[BLACK][target] & bitboards[P]);
+    attacks |= knight_attack_table[target] & (bitboards[N] | bitboards[n]);
+    attacks |= king_attack_table[target] & (bitboards[k] | bitboards[K]);
+    U64 bishops = (bitboards[b] | bitboards[B]) | (bitboards[q] | bitboards[Q]);
+    U64 rooks = (bitboards[r] | bitboards[R]) | (bitboards[q] | bitboards[Q]);
+    if (bishopAttackTable[target][0] & bishops)
+        attacks |= (bishopAttacks(target, occ) & bishops);
+    if (rookAttackTable[target][0] & rooks)
+        attacks |= (rookAttacks(target, occ) & rooks);
+    return attacks;
 }
 
-static inline int make_see_capture(U64 attacker, int sq) {
-    int source = bitscanForward(attacker);
-    int captured = piece_on_square[sq];
-    int piece = piece_on_square[source];
-    U64 from_to_bb = ((U64)1 << sq) | attacker;
-    bitboards[captured] ^= ((U64)1 << sq);
-    bitboards[piece] ^= from_to_bb;
-    occupancies[BOTH] ^= attacker;
-    piece_on_square[source] = EMPTY;
-    piece_on_square[sq] = piece;
-    // Weird return type: Return the captured piece in the lower 4 bits, source in the next
-    return captured | (source << 4);
-}
+int SEE(int side, U16 move) {
+    U64 attacks, temp = 0, toccupied = occupancies[BOTH];
+    U64 bsliders = (bitboards[b] | bitboards[B]) | (bitboards[q] | bitboards[Q]);
+    U64 rsliders = (bitboards[r] | bitboards[R]) | (bitboards[q] | bitboards[Q]);
+    int attacked_piece, piece, nc=1, see_list[32];
+    int source = move_source(move), target = move_target(move);
 
-static inline void unmake_see_capture(int captured, int sq, int source) {
-    int capturer = piece_on_square[sq];
-    U64 from_to_bb = ((U64)1 << sq) | ((U64)1 << source);
-    bitboards[captured] ^= ((U64)1 << sq);
-    bitboards[capturer] ^= from_to_bb;
-    occupancies[BOTH] ^= ((U64)1 << source);
-    piece_on_square[source] = capturer;
-    piece_on_square[sq] = captured;
-}
-
-// Static exchange evaluation
-int SEE(int square, int side) {
-    int score = 0;
-    U64 attacker = get_smallest_attacker(square, side);
-    if (attacker) {
-        int capsrc;
-        capsrc = make_see_capture(attacker, square);
-        //captured = capsrc & 0xF;
-        //source = capsrc >> 4;
-        // Don't consider a capture if it loses material
-        score = simple_piece_values[(capsrc & 0xF) % 6] - SEE(square, 1 ^ side);
-        score = (score > 0) ? score : 0;
-        unmake_see_capture((capsrc & 0xF),square,(capsrc >> 4));
+    attacks = attacks_to(target);
+    attacked_piece = positive_simple_piece_values[piece_on_square[target]];
+    side ^= 1;
+    see_list[0] = attacked_piece;
+    toccupied &= ~((U64)1 << source);
+    piece = piece_on_square[source];
+    attacked_piece = positive_simple_piece_values[piece];
+    int piece_type = piece % 6;
+    if (piece & 1)     // Pawn, bishop, queen
+        attacks |= bishopAttacks(target, toccupied) & bsliders;
+    if (piece_type != K && (piece_type == P || piece_type > B))
+        attacks |= rookAttacks(target, toccupied) & rsliders;
+    // Pick out least valuable attacker
+    for (attacks &= toccupied; attacks; attacks &= toccupied) {
+        for (piece = P; piece <= k; piece++) {
+            if ((temp = bitboards[(piece % 6) + 6 * side] & attacks)) {
+                break;  // Least valuable
+            }
+        }
+        if (piece > k)
+            break;
+        piece = piece % 6;
+        toccupied ^= (temp & -temp);    // Clear of the attacker's square
+        if (piece & 1)
+            attacks |= bishopAttacks(target, toccupied) & bsliders;
+        if (piece_type != K && piece_type > B)
+            attacks |= rookAttacks(target, toccupied) & rsliders;
+        see_list[nc] = -see_list[nc - 1] + attacked_piece;
+        attacked_piece = positive_simple_piece_values[piece];
+        if (see_list[nc++] - attacked_piece > 0)
+            break;
+        side ^= 1;    
     }
-    return score;
-}
-
-// SEE a capture move
-// E.G. if the move is QxP (+1), and the SEE determines that the static exchange result is a +9 for the other side, via PxQ, returns -8
-int SEE_capture(int source, int target, int side) {
-    int score, capsrc;
-    int piece = piece_on_square[source];
-    capsrc = make_see_capture((U64)1 << source, target);
-    score = simple_piece_values[(capsrc & 0xF) % 6] - SEE(target, 1 ^ side);
-    unmake_see_capture((capsrc & 0xF),target,(capsrc >> 4));
-    return score;
+    while (--nc)
+        see_list[nc - 1] = (-see_list[nc - 1] > see_list[nc]) ? see_list[nc - 1] : -see_list[nc];
+    return see_list[0];
 }

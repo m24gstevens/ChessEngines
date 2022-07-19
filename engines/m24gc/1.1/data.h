@@ -23,6 +23,7 @@ extern int en_passent_square;
 
 extern int material_count;
 extern int simple_piece_values[12];
+extern int positive_simple_piece_values[12];
 
 extern int ply;
 extern int hply;

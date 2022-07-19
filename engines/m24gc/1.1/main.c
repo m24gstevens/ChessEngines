@@ -51,8 +51,8 @@ int main() {
     init_all();
     init_times();
     if (debug) {
-        parse_fen("k7/8/6n1/4p3/3P4/3N1N2/8/K7 w - - 0 1");
-        printf("%d\n", material_count);
+        parse_fen("k7/8/3p2n1/4p3/3P1P2/3N4/8/1K6 w - - 0 1");
+        printf("%d\n", SEE(WHITE, encode_move(d3,e5,4)));
     } else {
         uci();
     }

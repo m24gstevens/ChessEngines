@@ -122,13 +122,6 @@ int quiesce(int alpha, int beta) {
         // Fail high
         return beta;
     }
-    // Most basic form of delta pruning
-    // Idea is that we don't do move generation for those hopeless nodes where we have no hope of winning back material
-    //int delta = 975;     // Value of a queen
-    //if (bitboards[P + 6*side_to_move] & promoting_ranks[side_to_move])   // Maybe a promotion
-        //delta += 775;
-    //if (static_evaluation < alpha - delta)
-        //return alpha;
 
     if (static_evaluation > alpha) {
         // PV node
@@ -144,9 +137,14 @@ int quiesce(int alpha, int beta) {
     sort_moves();
     for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1];i++) {
         U16 move = move_stack.moves[i].move;
+        // Delta pruning - If static eval + captured piece value + delta margin < alpha, we can skip
+        // Don't use in the case of promotions (Should be turned off in the endgame)
+        if (!(move_flags(move) & 0x8) && static_evaluation + positive_simple_piece_values[piece_on_square[move_target(move)]] + DELTA < alpha)
+            continue;
         // If this capture has a SEE value < 0, discard
-        //if (SEE_capture(move_source(move), move_target(move), side_to_move) < 0)
-            //continue;
+        if (positive_simple_piece_values[piece_on_square[move_source(move)]] > positive_simple_piece_values[piece_on_square[move_target(move)]]
+        && SEE(side_to_move, move) < 0)
+            continue;
         make_move(move_stack.moves[i].move);
         int score = -quiesce(-beta, -alpha);
         unmake_move();

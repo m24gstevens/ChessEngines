@@ -117,6 +117,7 @@ typedef struct {
 // search
 #define VALWINDOW 50
 #define NULLMOVE_R 2
+#define DELTA 200
 
 // Evaluation
 #define MG 0

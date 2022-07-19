@@ -65,7 +65,7 @@ void sort_moves();
 void init_evaluation_masks();
 
 int eval(int, int);
-int SEE_capture(int, int, int);
+int SEE(int, U16);
 
 void search(int);
 void print_move_scores();

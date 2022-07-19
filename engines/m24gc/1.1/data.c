@@ -36,7 +36,8 @@ int fifty_move;
 U64 hash;
 
 int material_count;
-int simple_piece_values[12] = {20000, 100, 300, 300, 500, 900, -20000, -100, -300, -500, -900};
+int simple_piece_values[12] = {20000, 100, 300, 300, 500, 900, -20000, -100, -300, -300, -500, -900};
+int positive_simple_piece_values[12] = {20000, 100, 300, 300, 500, 900, 20000, 100, 300, 300, 500, 900};
 
 // Repetitions table
 U64 repetition_table[MAX_HIST];
