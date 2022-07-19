@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #define northOne(bb) (bb << 8)
@@ -66,7 +67,7 @@ typedef uint16_t U16;
 #define MAX_PLY 64
 #define STACK_SIZE 16000
 #define MAX_HIST 500
-#define HASH_SIZE 80000
+#define MAX_HASH 128
 
 // tt flags
 #define HASH_FLAG_EXACT 0

@@ -93,7 +93,8 @@ U64 en_passent_keys[64];
 U64 castle_keys[16];
 U64 side_key;
 
-hash_t hash_table[HASH_SIZE];
+hash_t *hash_table = NULL;
+int hash_entries = 0;
 
 // UCI
 char *starting_position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

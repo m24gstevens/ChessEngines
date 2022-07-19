@@ -220,6 +220,7 @@ void uci() {
     setbuf(stdin, NULL);
     setbuf(stdout, NULL);
 
+    int mb = 32;
     char input[2000];
     printf("id name m24gc %s\n","1.1");
     printf("id author Matt Stevens\n");
@@ -264,8 +265,20 @@ void uci() {
         // "uci" command
         else if (strncmp(input, "uci", 3) == 0) {
             printf("id name m24gc\n");
-            printf("author name Matt Stevens\n");
+            printf("id author Matt Stevens\n");
+            printf("option name Hash type spin default 32 min 4 max %d\n", MAX_HASH);
             printf("uciok\n");
+        }
+
+        else if (!strncmp(input, "setoption name Hash value ", 26)) {
+            // init MB
+            sscanf(input, "%*s %*s %*s %*s %d", &mb);
+            if (mb < 4) mb = 4;
+            if (mb > MAX_HASH) mb = MAX_HASH;
+
+            // Set the hash size
+            printf("Set hash table size to %dMB\n", mb);
+            init_hash_table(mb);
         }
     }
 }

@@ -42,7 +42,8 @@ void init_all() {
     init_slider_attack_masks();
     init_random_keys();
     init_evaluation_masks();
-    //clear_hash();
+    // Initialize hash table with default 32MB
+    init_hash_table(32);
 }
 
 

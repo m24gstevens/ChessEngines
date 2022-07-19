@@ -2,6 +2,37 @@
 #include "data.h"
 #include "protos.h"
 
+// Clear the hash table
+void clear_hash() {
+    hash_t *hash_entry;
+    for (hash_entry = hash_table; hash_entry < hash_table + hash_entries; hash_entry++) {
+        hash_entry->key = 0;
+        hash_entry->depth = 0;
+        hash_entry->flags = 0;
+        hash_entry->score = 0;
+    }
+}
+
+// Dynamically allocate memory for the hash table
+void init_hash_table(int mb) {
+    int hash_size = 0x100000 * mb;
+    hash_entries = hash_size / sizeof(hash_t);
+    if (hash_table != NULL) {
+        // Clear the hash memory
+        free(hash_table);
+    }
+    hash_table = (hash_t *) malloc(hash_entries * sizeof(hash_t));
+
+    if (hash_table == NULL) {
+        // Failed to allocate memory
+        init_hash_table(mb / 2);
+    }
+    else {
+        // Allocation worked
+        clear_hash();
+    }
+}
+
 // Initialize pseudo-random keys used for Zobrist hashing
 void init_random_keys() {
     int i,j;
@@ -58,19 +89,9 @@ void test_hash(int depth) {
     }
 }
 
-void clear_hash() {
-    for (int index = 0; index < HASH_SIZE; index++) {
-        hash_t entry = hash_table[index];
-        entry.key = C64(0);
-        entry.depth = 0;
-        entry.flags = 0;
-        entry.score = 0;
-    }
-}
-
 int probe_hash(int depth, int alpha, int beta) {
     // Lookup
-    hash_t *phash = &hash_table[hash % HASH_SIZE];
+    hash_t *phash = &hash_table[hash % hash_entries];
     if (phash->key == hash) {
         // Found a match
         if (phash->depth >= depth) {
@@ -86,7 +107,7 @@ int probe_hash(int depth, int alpha, int beta) {
 }
 
 void record_hash(int depth, int score, int hash_flag) {
-    hash_t *phash = &hash_table[hash % HASH_SIZE];
+    hash_t *phash = &hash_table[hash % hash_entries];
     phash->key = hash;
     phash->score = score;
     phash->flags = hash_flag;

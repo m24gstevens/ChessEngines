@@ -51,7 +51,8 @@ extern U64 en_passent_keys[64];
 extern U64 castle_keys[16];
 extern U64 side_key;
 
-extern hash_t hash_table[HASH_SIZE];
+extern hash_t *hash_table;
+extern int hash_entries;
 
 extern char *starting_position;
 extern char *kiwipete;
