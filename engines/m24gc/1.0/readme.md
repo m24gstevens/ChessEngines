@@ -1,8 +1,6 @@
 # M24GC
 
-A UCI engine in C
-
-## Features
+## Features in 1.0
 Board Representation
 - Bitboards
 - 8x8 board
