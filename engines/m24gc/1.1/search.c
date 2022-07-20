@@ -321,14 +321,8 @@ void search(int depth) {
     stopped = 0;
 
     for (int current_depth = 1; current_depth <= depth; current_depth++) {
-        // if time is up
-        if (stopped == 1) {
-            if (current_depth != 1)
-                break;
-        }
         follow_pv = 1;
         score = negamax(current_depth,alpha,beta);
-
         if ((score <= alpha) || (score >= beta)) {
             // Fell outside the window; try again with a full-width window, same depth
             alpha = -50000;
@@ -337,6 +331,11 @@ void search(int depth) {
         }
         alpha = score - VALWINDOW;
         beta = score + VALWINDOW;
+
+        // if time is up
+        if (stopped == 1)
+            break;
+
         if (pv_length[0]) {
         printf("info score cp %d depth %d nodes %lld pv ",score,current_depth,nodes);
         print_pv();
