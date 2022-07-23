@@ -150,10 +150,6 @@ void print_move_history(int ply) {
 }
 
 void add_move(U16 data) {
-    if (moves_start_idx[ply+1] >= STACK_SIZE) {
-        printf("AAAAAAAAAAAAAA\n");
-        raise(SIGSEGV);
-    }
     move_stack.moves[moves_start_idx[ply+1]++].move = data;
 }
 
@@ -1747,6 +1743,7 @@ int make_move(U16 move) {
     game_history[hply].material[0] = material_count[0];
     game_history[hply].material[1] = material_count[1];
     game_history[hply].hash = hash;
+    game_history[hply].last_move = last_move;
     hply++;
     ply++;
     /* Update the bitboards and 8x8 board */
@@ -1838,22 +1835,14 @@ int make_move(U16 move) {
     castling_rights &= castling_rights_update[move_from];
     castling_rights &= castling_rights_update[move_to];
     hash ^= castle_keys[castling_rights];
+    last_move.piece = moved_piece;
+    last_move.to = move_to;
     // Fifty move
     if ((flags & 0x4) || (moved_piece == P) || (moved_piece == p))
         fifty_move = 0;
     else
         fifty_move++;
     // King is never left in check, so don't need to unmake ever
-    if (hash != generate_hash()) {
-        printf("Trouble updating with move flags %d\n", move_flags(move));
-        printf("Move: ");
-        print_move(move);
-        printf("\n");
-        printf("Move stack: ");
-        print_move_history(ply);
-        print_board();
-        raise(SIGSEGV);
-    }
     return _TRUE;
 }
 
@@ -1925,6 +1914,7 @@ void unmake_move() {
     fifty_move = hist.fifty_clock;
     material_count[0] = hist.material[0];
     material_count[1] = hist.material[1];
+    last_move = hist.last_move;
     hash = hist.hash;
     return;
 }

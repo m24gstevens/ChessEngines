@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
+#include <math.h>
 #define northOne(bb) (bb << 8)
 #define southOne(bb) (bb >> 8)
 #define northTwo(bb) (bb << 16)
@@ -67,12 +67,13 @@ typedef uint16_t U16;
 #define MAX_PLY 64
 #define STACK_SIZE 16000
 #define MAX_HIST 500
-#define MAX_HASH 128
+#define MAX_HASH 256
 
 // tt flags
 #define HASH_FLAG_EXACT 0
 #define HASH_FLAG_ALPHA 1
 #define HASH_FLAG_BETA 2
+#define HASH_FLAG_EMPTY 3
 
 #define NO_HASH_ENTRY 100000
 
@@ -109,11 +110,17 @@ typedef struct {
 } _move_list;
 
 typedef struct {
+    char piece;
+    char to;
+} counter_move;
+
+typedef struct {
     U16 move;
     U16 flags;
     int fifty_clock;
     int material[2];
     U64 hash;
+    counter_move last_move;
 } hist_t;
 
 // search

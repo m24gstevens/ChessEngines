@@ -8,7 +8,7 @@ void clear_hash() {
     for (hash_entry = hash_table; hash_entry < hash_table + hash_entries; hash_entry++) {
         hash_entry->key = 0;
         hash_entry->depth = 0;
-        hash_entry->flags = 0;
+        hash_entry->flags = HASH_FLAG_EMPTY;
         hash_entry->score = 0;
     }
 }
@@ -89,10 +89,20 @@ void test_hash(int depth) {
     }
 }
 
+static inline hash_t *hash_lookup() {
+    int hash_index = hash % (hash_entries - 1);
+    if (hash_table[hash_index].flags != HASH_FLAG_EMPTY && hash_table[hash_index].key == hash)
+        return &hash_table[hash_index];
+    else if (hash_table[hash_index + 1].flags != HASH_FLAG_EMPTY && hash_table[hash_index + 1].key == hash)
+        return &hash_table[hash_index + 1];
+    else
+        return NULL;
+}
+
 int probe_hash(int depth, U16 *best_move, int alpha, int beta) {
     // Lookup
-    hash_t *phash = &hash_table[hash % hash_entries];
-    if (phash->key == hash) {
+    hash_t *phash = hash_lookup();
+    if (phash != NULL) {
         // Found a match
         if (phash->depth >= depth) {
             if (phash->flags == HASH_FLAG_EXACT)
@@ -109,10 +119,24 @@ int probe_hash(int depth, U16 *best_move, int alpha, int beta) {
 }
 
 void record_hash(int depth, U16 best_move, int score, int hash_flag) {
-    hash_t *phash = &hash_table[hash % hash_entries];
-    phash->key = hash;
-    phash->score = score;
-    phash->flags = hash_flag;
-    phash->depth = depth;
-    phash->best_move = best_move;
+    // Don't store if time is up
+    if (stopped == 1)
+        return;
+    int hash_index = hash % (hash_entries - 1);
+    hash_t *phash = &hash_table[hash_index];
+    // Simple "highest depth" replacement scheme
+    if (phash->flags == HASH_FLAG_EMPTY || (phash->key == hash && phash->depth <= depth)) {
+        phash->key = hash;
+        phash->score = score;
+        phash->flags = hash_flag;
+        phash->depth = depth;
+        phash->best_move = best_move;
+    } else if (phash->key != hash && (hash_table[hash_index + 1].depth <= depth)) {
+        phash = &hash_table[hash_index + 1];
+        phash->key = hash;
+        phash->score = score;
+        phash->flags = hash_flag;
+        phash->depth = depth;
+        phash->best_move = best_move;
+    }
 }

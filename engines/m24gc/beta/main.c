@@ -37,14 +37,15 @@ void prepare_search() {
 }
 
 void init_all() {
+    last_move.piece = EMPTY;
     ply = 0;
     prepare_search();
     init_jumper_attack_masks();
     init_slider_attack_masks();
     init_random_keys();
     init_evaluation_masks();
-    // Initialize hash table with default 32MB
-    init_hash_table(32);
+    // Initialize hash table with default 64MB
+    init_hash_table(64);
 }
 
 
@@ -54,7 +55,7 @@ int main() {
     init_times();
     if (debug) {
         parse_fen(kiwipete);
-        search(12);
+        parse_go("go infinite");
     } else {
         uci();
     }

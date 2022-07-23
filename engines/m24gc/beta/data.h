@@ -29,6 +29,7 @@ extern int ply;
 extern int hply;
 extern int fifty_move;
 extern U64 hash;
+extern counter_move last_move;
 
 extern U64 repetition_table[MAX_HIST];
 extern int repetition_index;
@@ -59,6 +60,7 @@ extern char *kiwipete;
 extern char *cmk_position;
 extern char *headache_position;
 extern char *repetitions;
+extern char *italian_game;
 
 extern int quit;
 extern int movestogo;

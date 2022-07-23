@@ -31,8 +31,8 @@ int killer_moves[2][MAX_PLY];
 int history_moves[12][64];
 
 // Counter heuristic
-// [from][to]
-U16 counter_moves[64][64];
+// [piece][to]
+U16 counter_moves[12][64];
 
 // Principal variation scoring
 int pv_length[MAX_PLY];
@@ -77,18 +77,22 @@ int score_move(U16 move) {
             SEE_bonus = 2000;
         else if (SEE_value == 0)
             SEE_bonus = 1000;
+        else
+            SEE_bonus = -7000;
         //Score captures by MVV LVA
         return MVV_LVA[piece_on_square[move_target(move)]][piece_on_square[move_source(move)]] + SEE_bonus + 10000;
     } else {
         //Score quiet
-        U16 prev_move = 0;
-        if (hply > 0)
-            prev_move = game_history[hply - 1].move;
-        //score killer moves and counter moves
+        //score killer moves
         if (killer_moves[0][ply] == move)
-            return 6000;
+            return 9000;
         else if (killer_moves[1][ply] == move)
-            return 5000;
+            return 8000;
+        // Counter moves
+        else if (last_move.piece != EMPTY) {
+            if (counter_moves[last_move.piece][last_move.to] == move)
+                return 7000;
+        }
         //score by history
         else
             return history_moves[piece_on_square[move_source(move)]][move_target(move)];
@@ -109,18 +113,11 @@ void score_moves(U16 best_move) {
     int i;
     for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1]; i++) {
         U16 move = move_stack.moves[i].move;
-        if (best_move == move) 
-            move_stack.moves[i].score = 30000;   // Search hash moves first
+        if (best_move == move) {
+            move_stack.moves[i].score = 40000;
+        }
         else
             move_stack.moves[i].score = score_move(move);
-        U16 prev_move = 0;
-        if (hply > 0)
-            prev_move = game_history[hply - 1].move;
-        if (prev_move && counter_moves[move_source(prev_move)][move_target(prev_move)] == move && !(move_flags(prev_move) & 0x4)) {
-            if (!(move_flags(move) & 0x4))
-                move_stack.moves[i].score += 500;  // Counter move bonus
-        }
-
     }
 }
 
@@ -252,6 +249,14 @@ int negamax(int depth, int alpha, int beta) {
     U64 checkers = all_checkers();
     if (checkers)
         depth++;
+    
+    int static_evaluation = eval(alpha, beta);
+    // Static null move
+    if (depth <= 3 && !checkers && !pv_node && abs(beta) < 50000 - 100) {
+        int margin = 120 * depth;
+        if (static_evaluation - margin >= beta)
+            return beta;
+    }
 
     // Null-move pruning
     if (depth >= 3 && !checkers && ply) {
@@ -326,14 +331,12 @@ int negamax(int depth, int alpha, int beta) {
             record_hash(depth, best_move, beta, HASH_FLAG_BETA);
 
             if (!(move_flags(move) & 0x4)) {
-                // Counter moves
-                if (hply > 0) {
-                    U16 previous_move = game_history[hply - 1].move;
-                    counter_moves[move_source(previous_move)][move_target(previous_move)] = move;
-                }
                 // Store killer moves
                 killer_moves[1][ply] = killer_moves[0][ply];
                 killer_moves[0][ply] = move;
+                // Counter moves
+                if (last_move.piece != EMPTY)   // There was a last move
+                    counter_moves[last_move.piece][last_move.to] = move;
             }
             // Fail high
             return beta;
