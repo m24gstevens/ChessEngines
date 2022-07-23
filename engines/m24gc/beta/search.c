@@ -27,7 +27,7 @@ int MVV_LVA[13][12] = {
 int killer_moves[2][MAX_PLY];
 
 // history heuristic
-// [piece][square]
+// [piece][to]
 int history_moves[12][64];
 
 // Counter heuristic
@@ -43,10 +43,10 @@ int follow_pv;
 
 void clear_tables() {
     memset(killer_moves, 0, sizeof(killer_moves));
-    memset(history_moves, 0, sizeof(history_moves));
     memset(counter_moves, 0, sizeof(counter_moves));
     memset(pv_length, 0, sizeof(pv_length));
     memset(pv_table, 0, sizeof(pv_table));
+    memset(history_moves, 0, sizeof(history_moves));
 }
 
 // PV move scoring
@@ -55,7 +55,7 @@ static inline void score_pv() {
     for (int i=moves_start_idx[ply]; i < moves_start_idx[ply+1]; i++) {
         if (pv_table[0][ply] == move_stack.moves[i].move) {
             follow_pv = _TRUE;
-            move_stack.moves[i].score += 20000;
+            move_stack.moves[i].score += 20000 + 80000000;
             return;
         }
     }
@@ -69,6 +69,7 @@ void print_pv() {
 }
 
 int score_move(U16 move) {
+    int non_history_bonus = 80000000;
     if (move_flags(move) & 0x4) {
         int SEE_bonus = 0;
         // Score by SEE
@@ -80,22 +81,25 @@ int score_move(U16 move) {
         else
             SEE_bonus = -7000;
         //Score captures by MVV LVA
-        return MVV_LVA[piece_on_square[move_target(move)]][piece_on_square[move_source(move)]] + SEE_bonus + 10000;
+        return MVV_LVA[piece_on_square[move_target(move)]][piece_on_square[move_source(move)]] + SEE_bonus + 10000 + non_history_bonus;
     } else {
         //Score quiet
         //score killer moves
         if (killer_moves[0][ply] == move)
-            return 9000;
+            return 9000 + non_history_bonus;
         else if (killer_moves[1][ply] == move)
-            return 8000;
+            return 8000 + non_history_bonus;
         // Counter moves
         else if (last_move.piece != EMPTY) {
             if (counter_moves[last_move.piece][last_move.to] == move)
-                return 7000;
+                return 7000 + non_history_bonus;
         }
         //score by history
-        else
+        else {
+            int pc = piece_on_square[move_source(move)];
+            int target = move_target(move);
             return history_moves[piece_on_square[move_source(move)]][move_target(move)];
+        }
     }
 }
 
@@ -114,7 +118,7 @@ void score_moves(U16 best_move) {
     for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1]; i++) {
         U16 move = move_stack.moves[i].move;
         if (best_move == move) {
-            move_stack.moves[i].score = 40000;
+            move_stack.moves[i].score = 40000 + 80000000;
         }
         else
             move_stack.moves[i].score = score_move(move);
@@ -271,6 +275,16 @@ int negamax(int depth, int alpha, int beta) {
             return beta;
     }
 
+    // Razoring
+    if (depth == 1 && static_evaluation <= alpha - 300) {
+        return quiesce(alpha, beta);
+    } 
+    // Decide if futility pruning is applicaple
+    int lmpMargin[5] = { 0, 5, 8, 12, 17};
+    int futility_margin[4] = {0, 200, 300, 500};
+    int futility = 0;
+    if (depth <= 3 && !pv_node && !checkers && abs(alpha) < 48000 && (static_evaluation + futility_margin[depth] <= alpha))
+        futility = 1;
     generate_moves();
     // Move-ordering
     score_moves(best_move);
@@ -280,30 +294,57 @@ int negamax(int depth, int alpha, int beta) {
     sort_moves();
     // Number of moves searched at current depth
     int moves_searched = 0;
+    int quiet_searched = 0;
     for (int i=moves_start_idx[ply]; i<moves_start_idx[ply+1];i++) {
         move = move_stack.moves[i].move;
         make_move(move);
         legal_moves++;
-        // All other nodes
-        if (moves_searched == 0)
-            score = -negamax(depth - 1, -beta, -alpha);
-        else {
-            // Late move reduction
-            if (moves_searched >= full_depth_moves && depth >= reduction_limit &&
-                !checkers && !(move_flags(move) & 0xC)) {
-                // Reduce the depth
-                score = -negamax(depth - 2, -alpha - 1, -alpha);
-            } else score = alpha + 1;
-            // Principal variation search PVS
-            if (score > alpha) {
-                score = -negamax(depth - 1, -alpha-1, -alpha);
+        if (!pv_node && moves_searched && !(move_flags(move) & 0xC) & !in_check(side_to_move)) {
+            // Futility pruning
+            if (futility) {
+                unmake_move();
+                continue;
             }
-            // if LMR fails, search with a full depth on the original alpha-beta bounds
+            // Late move pruning
+            if (depth <= 4 && quiet_searched > lmpMargin[depth] && fifty_move > 0) { //Enough quiet moves and not a pawn move
+                unmake_move();
+                continue;
+            }
+
+        }
+        // All other nodes
+        int new_depth = depth - 1;
+        int reduction_depth = 0;
+        // Late move reduction
+        if (moves_searched >= full_depth_moves && depth >= reduction_limit &&
+            !checkers && !(move_flags(move) & 0xC)) {
+            reduction_depth = 1 + sqrt((double)(depth - 1)) + sqrt((double)(moves_searched - 1))/2;
+            if (pv_node)
+                reduction_depth = (reduction_depth * 2) / 3;
+            // Reduce killers and counters less
+            if (move_stack.moves[i].score > 80000000)
+                reduction_depth--;
+            reduction_depth = MIN(new_depth - 1, MAX(0, reduction_depth));  // Don't drop to Qsearch
+            new_depth -= reduction_depth;
+        }
+        if (moves_searched == 0)
+            score = -negamax(new_depth, -beta, -alpha);
+        else {
+            // Possibly a reduced search, null window
+            score = -negamax(new_depth, -alpha - 1, -alpha);
+            // If LMR failed, try a null search with full depth
+            if (reduction_depth && score > alpha) {
+                new_depth += reduction_depth;
+                score = -negamax(new_depth, -alpha - 1, -alpha);
+            }
+            // if PVS fails, search with a full depth on the original alpha-beta bounds
             if ((score > alpha) && (score < beta))
-                score = -negamax(depth - 1, -beta, -alpha);
+                score = -negamax(new_depth, -beta, -alpha);
         }
         unmake_move();
         moves_searched++;
+        if (!(move_flags(move) & 0xC))
+            quiet_searched++;
         // return 0 if time is up
         if (stopped == 1) return 0;
 
@@ -313,8 +354,9 @@ int negamax(int depth, int alpha, int beta) {
             // Store the best move (For TT)
             best_move = move;
             // store history move
-            if (!(move_flags(move) & 0x4)) 
+            if (!(move_flags(move) & 0x4)) {
                 history_moves[piece_on_square[move_source(move)]][move_target(move)] += depth;
+            }
             // PV node
             alpha = score;
             // write PV move

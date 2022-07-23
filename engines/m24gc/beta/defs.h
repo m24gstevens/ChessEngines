@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 #define northOne(bb) (bb << 8)
 #define southOne(bb) (bb >> 8)
 #define northTwo(bb) (bb << 16)
@@ -17,6 +18,8 @@
 #define get_bit(bb, idx) (bb & ((U64)1 << (idx))) ? TRUE : FALSE
 #define clear_bit(bb, idx) bb &= ~((U64)1 << (idx))
 #define BITSCAN(bb) (__builtin_ffsll(bb))
+#define MIN(x,y) (((x) < (y)) ? (x) : (y))
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
 
 /* =================================
            Move Generation

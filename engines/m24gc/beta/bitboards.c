@@ -2,7 +2,7 @@
 #include "data.h"
 #include "protos.h"
 
-xorshift32_state seed = {725UL};
+xorshift32_state seed = {0x8AFBCBAAUL};
 
 MagicInfo magicBishopInfo[64];
 MagicInfo magicRookInfo[64];

@@ -61,6 +61,7 @@ extern char *cmk_position;
 extern char *headache_position;
 extern char *repetitions;
 extern char *italian_game;
+extern char *sharp_najdorf;
 
 extern int quit;
 extern int movestogo;
