@@ -93,6 +93,49 @@ void parse_fen(char *fen) {
     }
 
 }
+
+// Get the FEN string of the current position
+void get_fen(char *fen) {
+    // Pieces 
+    for (int rank=7; rank>=0; rank--) {
+        int count = 0;
+        for (int file=0; file<8;file++) {
+            int piece = piece_on_square[8*rank + file];
+            if (piece != EMPTY) {
+                if (count)
+                    *fen++ = count + '0';
+                *fen++ = piece_characters[piece];
+                count = 0;
+            } else
+                count++;
+        }
+        if (count) 
+            *fen++ = count + '0';
+        *fen++ = (rank == 0 ? ' ' : '/');
+    }
+    // Side to move
+    *fen++ = (side_to_move == WHITE ? 'w' : 'b');
+    *fen++ = ' ';
+    if (!castling_rights)
+        *fen++ = '-';
+    else {
+        if (castling_rights & WCK)
+            *fen++ = 'K';
+        if (castling_rights & WCQ)
+            *fen++ = 'Q';
+        if (castling_rights & BCK)
+            *fen++ = 'k';
+        if (castling_rights & BCQ)
+            *fen++ = 'q';
+    }
+    *fen++ = ' ';
+    if (en_passent_legal) {
+        *fen++ = (en_passent_square & 7) + 'a';
+        *fen++ = (en_passent_square >> 3) + '1';
+    } else
+        *fen++ = '-';
+    sprintf(fen, " %d", fifty_move);
+}
  
 /* =================================
            Move Generation
@@ -125,6 +168,14 @@ U64 all_checkers() {
 }
 
 /* Helper functions */
+void move_to_string(char *buf, U16 move_data) {
+    if ((move_flags(move_data)) & 0x8) {
+        sprintf(buf,"%s%s%c", square_strings[move_source(move_data)], square_strings[move_target(move_data)], promoted_pieces[(move_flags(move_data)) & 0x3]);
+    } else {
+        sprintf(buf,"%s%s", square_strings[move_source(move_data)], square_strings[move_target(move_data)]);
+    }
+}
+
 void print_move(U16 move_data) {
     if ((move_flags(move_data)) & 0x8) {
         printf("%s%s%c", square_strings[move_source(move_data)], square_strings[move_target(move_data)], promoted_pieces[(move_flags(move_data)) & 0x3]);
@@ -1961,6 +2012,20 @@ void unmake_null() {
     fifty_move = hist.fifty_clock;
     // No change in material
     hash = hist.hash;
+}
+
+
+int make_random_move() {
+    generate_moves();
+    U32 random_num = random_xor();
+    int random_offset, legal_moves_count;
+    legal_moves_count = moves_start_idx[ply + 1] - moves_start_idx[ply];
+    if (!legal_moves_count)
+        return 0;
+    random_offset = (int)((float)legal_moves_count * (((float)random_num)/((float)(0xFFFFFFFFUL) + 1.0)));
+    U16 random_move = move_stack.moves[moves_start_idx[ply] + random_offset].move;
+    make_move(random_move);
+    return 1;
 }
 
 /* Perft */

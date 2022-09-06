@@ -45,6 +45,10 @@ extern _move_list move_stack;
 extern int moves_start_idx[MAX_HIST];
 extern hist_t game_history[MAX_HIST];
 
+extern int pv_length[MAX_PLY];
+extern U16 pv_table[MAX_PLY][MAX_PLY];
+extern int follow_pv;
+
 extern U64 nodes;
 
 extern U64 piece_keys[13][64];

@@ -124,7 +124,7 @@ U16 parse_move(char *move_string) {
 
 /* Parses a position given a "position" UCI command */
 void parse_position(char *command) {
-    // Clear the history
+    // Clear history
     clear_history();
     /* Jump over "position " */
     char *current_command = command;
@@ -162,7 +162,7 @@ void parse_position(char *command) {
             current_command++;
          }
     }
-    print_board();
+    //print_board();
     clear_move_stack();
     return;
 }

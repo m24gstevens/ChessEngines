@@ -20,6 +20,7 @@
 #define BITSCAN(bb) (__builtin_ffsll(bb))
 #define MIN(x,y) (((x) < (y)) ? (x) : (y))
 #define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#define DISTANCE(sq1, sq2) MAX(abs((sq1 >> 3) - (sq2 >> 3)), abs((sq1 & 7) - (sq2 & 7)))
 
 /* =================================
            Move Generation
@@ -69,7 +70,7 @@ typedef uint16_t U16;
 
 #define MAX_PLY 64
 #define STACK_SIZE 16000
-#define MAX_HIST 500
+#define MAX_HIST 700
 #define MAX_HASH 256
 
 // tt flags
@@ -125,6 +126,11 @@ typedef struct {
     U64 hash;
     counter_move last_move;
 } hist_t;
+
+typedef struct {
+    U16 bestmove;
+    int evaluation;
+} quickresult_t;
 
 // search
 #define VALWINDOW 50

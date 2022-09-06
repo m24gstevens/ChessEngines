@@ -81,6 +81,9 @@ hist_t game_history[MAX_HIST];
 
 
 // Search
+int pv_length[MAX_PLY];
+U16 pv_table[MAX_PLY][MAX_PLY];
+int follow_pv;
 
 // Search nodes
 U64 nodes;

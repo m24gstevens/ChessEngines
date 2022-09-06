@@ -16,18 +16,19 @@ int ROOK_SEVENTH_BONUS = 30;
 int ROOK_OPEN_FILE_BONUS = 20;
 int ROOK_SEMI_OPEN_FILE_BONUS = 12;
 int UNDEVELOPED_PIECE_PENALTY = 7;
+int UNSTOPPABLE_PASSER = 800;
 
 // Penalties and bonuses for positional factors
-int doubled_pawn_penalty[2] = {12,20};
-int isolated_pawn_penalty[2] = {15,10};
-int backward_pawn_penalty[2] = {13, 8};
+int doubled_pawn_penalty[2] = {10,20};
+int isolated_pawn_penalty[2] = {12,8};
+int backward_pawn_penalty[2] = {15,10};
 // [phase][side][rank]
-int passed_pawn_bonus[2][2][8] = {{{0, 10, 20, 30, 40, 50, 60, 70},{70, 60, 50, 40, 30, 20, 10, 0}},
+int passed_pawn_bonus[2][2][8] = {{{0, 10, 15, 20, 30, 40, 50, 60},{60, 50, 40, 30, 20, 15, 10, 0}},
 {{0, 55, 65, 70, 75, 80, 85, 90},{90, 85, 80, 75, 70, 65, 55, 0}}};
 int rook_seventh_bonus[2] = {25, 15};
 int rook_open_file_bonus[2] = {25, 15};
 int rook_semi_open_bonus[2] = {12, 16};
-int NO_PAWNS_PENALTY = 150;
+int NO_PAWNS_PENALTY = 100;
 
 // Piece-Square tables for positional evaluation
 // pstables[phase][piece] where the tables are from Black's perspective
@@ -169,20 +170,41 @@ U64 fileFill(U64 bb) {
 U64 pawnSpan[2][64];
 U64 besideFileMasks[64];
 U64 fileMasks[64];
+U64 rankMasks[64];
+// [pawn side][opposing king to move][pawn square]
+U64 rule_of_square[2][2][64];
+// [pawn side][pawn square]
+U64 critical_squares[2][64];
 
 void init_evaluation_masks() {
-    int i;
+    int i,j;
     U64 bb, pawn;
     for (int i=0; i<64; i++) {
         pawn = (U64)1 << i;
         bb = northFill(pawn) & ~pawn;
         bb |= westOne(bb) | eastOne(bb);
         pawnSpan[0][i] = bb;
+        critical_squares[0][i] = northOne(bb);
         bb = southFill(pawn) & ~pawn;
         bb |= westOne(bb) | eastOne(bb);
         pawnSpan[1][i] = bb;
+        critical_squares[1][i] = southOne(bb);
         fileMasks[i] = fileFill(pawn);
+        rankMasks[i] = (U64)0xFF << (i & 56);
         besideFileMasks[i] = westOne(fileMasks[i]) | eastOne(fileMasks[i]);
+        // rule of square
+        for (int pawn_side = WHITE; pawn_side <= BLACK; pawn_side++) {
+            for (int king_to_move = _FALSE; king_to_move <= _TRUE; king_to_move++) {
+                rule_of_square[pawn_side][king_to_move][i] = C64(0);
+                for (int j=0; j<64; j++) {
+                    int pawn_steps_to_queen = (pawn_side ? (i >> 3) : (7 - (i >> 3)));
+                    int king_steps_to_queen_rank = (pawn_side ? (j >> 3) : (7 - (j >> 3)));
+                    if ((king_steps_to_queen_rank - pawn_steps_to_queen - (king_to_move ? 1 : 0)) <= 0 &&
+                    abs((j & 7) - (i & 7)) <= (pawn_steps_to_queen + (king_to_move ? 1 : 0)))
+                        rule_of_square[pawn_side][king_to_move][i] |= (U64)1 << j;
+                }
+            }
+        }
     }
 }
 
@@ -224,59 +246,132 @@ static inline int count_black_backward_pawns(U64 bpawns) {
     return popcount(bpawns); 
 }
 
-/*
-int eval_king(int side, int opponent_material) {
+// determine whether the position is a material draw
+int material_draw() {
+    if (!bitboards[P] && !bitboards[p]) {
+        if (!bitboards[R] && !bitboards[r] && !bitboards[Q] && !bitboards[q]) {
+            if (!bitboards[B] && !bitboards[b]) {
+                if (popcount(bitboards[N]) < 3 && popcount(bitboards[n]) < 3)
+                    return 1;
+            } else if (!bitboards[N] && !bitboards[n]) {
+                if (abs(popcount(bitboards[B]) - popcount(bitboards[b])) < 2)
+                    return 1;
+            } else if ((popcount(bitboards[N]) < 3 && !bitboards[B]) || (!((bitboards[B]) & (bitboards[B]-1)) && !bitboards[N])) {
+                if ((popcount(bitboards[n]) < 3 && !bitboards[b]) || (!((bitboards[b]) & (bitboards[b]-1)) && !bitboards[n]))
+                    return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+// Determine whether the side on the move has the opposition
+int has_opposition(int is_opponent_move, int king, int enemy_king) {
+    int file_dist, rank_dist;
+    file_dist = abs((king & 7) - (enemy_king & 7));
+    rank_dist = abs((king >> 3) - (enemy_king >> 3));
+    if (rank_dist < 2)
+        return 1;   // No matter if it is us to move, if we are in this irregular situation, we may either gain opposition or get to a critical square
+    if (!is_opponent_move) {
+        // If we are on the move, we may make it an even distance away horizontally and vertically
+        if (rank_dist & 1) {
+            rank_dist--;
+            is_opponent_move = 1;
+        }
+        if (file_dist & 1) {
+            file_dist--;
+            is_opponent_move = 1;
+        }
+    }
+    if (!(file_dist & 1) && !(rank_dist & 1) && is_opponent_move)
+        return 1;
+    return 0;
+}
+
+int king_pawn_king(int side) {
+    // Determines whether the side to move has a passer that can promote with the help of the king
+    if (!((((bitboards[B] | bitboards[N])) | (bitboards[b] | bitboards[N]))) && !((((bitboards[Q] | bitboards[R])) | (bitboards[q] | bitboards[r])))) {
+        // King and pawn endgame
+        int wking_sq = bitscanForward(bitboards[K]);
+        int bking_sq = bitscanForward(bitboards[k]);
+        int kings_sq[2] = {wking_sq, bking_sq};
+        if (bitboards[P + 6*side] && !bitboards[p - 6*side]) {  // If we have pawns, opponent doesn't
+            bitboard = bitboards[P + 6*side];
+            while (bitboard) {
+                sq = bitscanForward(bitboard);
+                clear_ls1b(bitboard);
+                // Rule of the square
+                if (!(bitboards[k - 6 * side] & rule_of_square[side][side_to_move ^ side][sq]))
+                    return 1;   // Decrease in score if opposing side is promoting
+                // King should be infront of pawn
+                if (((kings_sq[side] >> 3) - (sq >> 3)) * (1 - 2*side) <= 0)
+                    continue;
+                // For a rook pawn, king must be on adjacent file and closer to queening square
+                int aFilePromotions[2] = {a8, a1};
+                int hFilePromotions[2] = {h8, h1};
+                if (!(sq & 7)) {    // A file
+                    if ((bitboards[K + 6*side] & C64(0x0202020202020202)) &&
+                    DISTANCE(kings_sq[side],aFilePromotions[side]) < DISTANCE(kings_sq[1 ^ side],aFilePromotions[side]))
+                        return 1;
+                    continue;
+                }
+                if (!(sq ^ 7)) {    // H file
+                    if ((bitboards[K + 6*side] & C64(0x4040404040404040)) &&
+                    DISTANCE(kings_sq[side],hFilePromotions[side]) < DISTANCE(kings_sq[1 ^ side],hFilePromotions[side]))
+                        return 1;
+                    continue;
+                }
+                U64 sixthRanks[2] = {C64(0xFF0000000000), C64(0xFF0000)};
+                // Closer than (or equal) to pawn than enemy king, and either on 6th rank or on "critical squares"
+                if (DISTANCE(kings_sq[side], sq) < DISTANCE(kings_sq[1^side], sq)) {
+                    if (bitboards[K + 6 * side] & (sixthRanks[side] | critical_squares[side][sq])) {
+                        return 1;
+                    }
+                }
+                // King is one square infront of the pawn and has the opposition
+                if (bitboards[K + 6 * side] & (pawnSpan[side][sq] ^ critical_squares[side][sq])) {
+                    if (has_opposition(side ^ side_to_move,kings_sq[side],kings_sq[1 ^ side]))
+                        return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+int eval_king(int side, int opponent_material, U64 open_files, U64 opponent_semiopen_files) {
+    int score = 0;
     U64 king_bb = bitboards[K + 6*side];
     int king_square = bitscanForward(king_bb);
-    int score = 0;
-    if (opponent_material >= 1400) {
-        // Evaluate the positioning in the middlegame
-        U64 pawn_bb = bitboards[P + 6*side];
-        U64 our_side = side ? ~white_half : white_half;
-        if (king_bb & eastOne(kingside)) {
-            // Only g and h files, i.e. castled kingside
-            pawn_bb &= kingside & our_side;
-            score += 15 * popcount(pawn_bb & secondSeventh);
-            score += 6 * popcount(pawn_bb & thirdSixth);
-            score += (-90 + 30 * popcount(pawn_bb));
-        } else if (king_bb & queenside) {
-            pawn_bb &= queenside & our_side;
-            score += 15 * popcount(pawn_bb & secondSeventh);
-            score += 6 * popcount(pawn_bb & thirdSixth);
-            score += (-90 + 30 * popcount(pawn_bb));
-        } else {
-            // Penalty for open files near the king
-            U64 open_files = ~fileFill(bitboards[p] | bitboards[P]);
-            score -= popcount(((king_bb) | westOne(king_bb) | eastOne(king_bb) ) & open_files) * 40;
-        }
-        score *= opponent_material;
-        score /= 3100;
-        return score + king_midgame_pstable[(side ? FLIP(king_square) : king_square)];
+    U64 pawn_bb = bitboards[P + 6*side];
+    U64 our_side = side ? ~white_half : white_half;
+    pawn_bb &= our_side;
+    if (king_bb & eastOne(kingside)) {
+        // Only g and h files, i.e. castled kingside
+        pawn_bb &= kingside;
+        score += 15 * popcount(pawn_bb & secondSeventh);
+        score += 6 * popcount(pawn_bb & thirdSixth);
+        score += (-90 + 30 * popcount(pawn_bb));
+    } else if (king_bb & queenside) {
+        pawn_bb &= queenside;
+        score += 15 * popcount(pawn_bb & secondSeventh);
+        score += 6 * popcount(pawn_bb & thirdSixth);
+        score += (-90 + 30 * popcount(pawn_bb));
     } else {
-        // Endgame
-        return score + king_endgame_pstable[king_square];
+        // Penalty for open files near the king
+        score -= 30 * popcount(open_files & besideFileMasks[king_square] & rankMasks[king_square]);
     }
-} */
+    if (fileMasks[king_square] & open_files)
+        score -= 30;
+    else if (fileMasks[king_square] & opponent_semiopen_files)
+        score -= 15;
+    score *= opponent_material;
+    score /= 3100;
+    return score;
+}
 
-// Evaluate the current position. If the posititon is good for the side to move, returns a + score
-int eval(int alpha, int beta) {
-    // Lazy evaluation based on piece material. If the material score (simple) would put us outside the alpha beta bounds by >600, we return that bound
-    /* int lazy_score = side_to_move ? (material_count[BLACK] - material_count[WHITE]) : (material_count[WHITE] - material_count[BLACK]);
-    if (lazy_score + 600 < alpha)
-        return alpha;
-    if (lazy_score - 600 > beta)
-        return beta; */
-    
-    int white_piece_scores = 0;
-    int black_piece_scores = 1;
-    // Get the game phase score
-    for (int piece=P; piece <= Q; piece++) {
-        white_piece_scores += popcount(bitboards[piece]) * piece_phase_values[MG][piece];
-        black_piece_scores += popcount(bitboards[6 + piece]) * piece_phase_values[MG][piece];
-    }
-    int game_phase = white_piece_scores + black_piece_scores;
-    const int opening_phase_score = 6192;
-    const int endgame_phase_score = 518;
+// Linear evaluation function - Where all of the evaluation parameters are found, besides the values used for tapered evaluation (Arguably the most important)
+void linear_eval(int *mg_score, int *eg_score) {
     int pc, sq;
     U64 bitboard;
     int eval_mg[2];
@@ -286,6 +381,8 @@ int eval(int alpha, int beta) {
     eval_eg[WHITE] = 0;
     eval_eg[BLACK] = 0;
     for (pc=K;pc<=Q;pc++) {
+        if (pc==P)
+            continue;
         bitboard = bitboards[pc];
         while (bitboard) {
             sq = bitscanForward(bitboard);
@@ -305,8 +402,138 @@ int eval(int alpha, int beta) {
             eval_eg[BLACK] += pstables[EG][pc][sq];
         }
     }
-    int mg_score = side_to_move ? (eval_mg[BLACK] - eval_mg[WHITE]) : (eval_mg[WHITE] - eval_mg[BLACK]);
-    int eg_score = side_to_move ? (eval_eg[BLACK] - eval_eg[WHITE]) : (eval_eg[WHITE] - eval_eg[BLACK]);
+    // Pawn structure considerations
+    bitboard = bitboards[P];
+    while (bitboard) {
+        sq = bitscanForward(bitboard);
+        clear_ls1b(bitboard);
+        eval_mg[WHITE] += piece_phase_values[MG][P];
+        eval_mg[WHITE] += pstables[MG][P][FLIP(sq)];
+        eval_eg[WHITE] += piece_phase_values[EG][P];
+        eval_eg[WHITE] += pstables[EG][P][FLIP(sq)];
+        if (!(pawnSpan[WHITE][sq] & bitboards[p])) {    // Passer
+            eval_mg[WHITE] += passed_pawn_bonus[MG][WHITE][sq >> 3];
+            eval_eg[WHITE] += passed_pawn_bonus[EG][WHITE][sq >> 3];
+        }
+        if (!(besideFileMasks[sq] & bitboards[P])) {    // Isolated
+            eval_mg[WHITE] -= isolated_pawn_penalty[MG];
+            eval_eg[WHITE] -= isolated_pawn_penalty[EG];
+        }
+        if ((besideFileMasks[sq] & bitboards[P]) && !(northOne(pawnSpan[BLACK][sq]) & bitboards[p] & ~fileMasks[sq])) {  // backward
+            eval_mg[WHITE] -= backward_pawn_penalty[MG];
+            eval_eg[WHITE] -= backward_pawn_penalty[EG];
+        }
+    }
+    int count = count_doubled_pawns(bitboards[P]);
+    eval_mg[WHITE] -= doubled_pawn_penalty[MG] * count;
+    eval_eg[WHITE] -= doubled_pawn_penalty[EG] * count;
+
+    bitboard = bitboards[p];
+    while (bitboard) {
+        sq = bitscanForward(bitboard);
+        clear_ls1b(bitboard);
+        eval_mg[BLACK] += piece_phase_values[MG][P];
+        eval_mg[BLACK] += pstables[MG][P][sq];
+        eval_eg[BLACK] += piece_phase_values[EG][P];
+        eval_eg[BLACK] += pstables[EG][P][sq];
+        if (!(pawnSpan[BLACK][sq] & bitboards[P])) {    // Passer
+            eval_mg[BLACK] += passed_pawn_bonus[MG][BLACK][sq >> 3];
+            eval_eg[BLACK] += passed_pawn_bonus[EG][BLACK][sq >> 3];
+        }
+        if (!(besideFileMasks[sq] & bitboards[p])) {    // Isolated
+            eval_mg[BLACK] -= isolated_pawn_penalty[MG];
+            eval_eg[BLACK] -= isolated_pawn_penalty[EG];
+        }
+        if ((besideFileMasks[sq] & bitboards[p]) && !(southOne(pawnSpan[WHITE][sq]) & bitboards[p] & ~fileMasks[sq])) {  // backward
+            eval_mg[BLACK] -= backward_pawn_penalty[MG];
+            eval_eg[BLACK] -= backward_pawn_penalty[EG];
+        }
+    }
+    count = count_doubled_pawns(bitboards[p]);
+    eval_mg[BLACK] -= doubled_pawn_penalty[MG] * count;
+    eval_eg[BLACK] -= doubled_pawn_penalty[EG] * count;
+
+    if (!bitboards[P])
+        eval_eg[WHITE] -= NO_PAWNS_PENALTY;
+    if (!bitboards[p])
+        eval_eg[BLACK] -= NO_PAWNS_PENALTY;
+
+    U64 open_files = ~fileFill(bitboards[p] | bitboards[P]);
+    U64 white_semiopen_files = ~fileFill(bitboards[P]) & ~open_files;
+    U64 black_semiopen_files = ~fileFill(bitboards[p]) & ~open_files;
+    // King safety
+    eval_mg[WHITE] += eval_king(WHITE, material_count[BLACK], open_files, black_semiopen_files);
+    eval_mg[BLACK] += eval_king(BLACK, material_count[WHITE],open_files, white_semiopen_files);
+
+    // Rooks on open and semi-open files
+    count = popcount(bitboards[R] & open_files);
+    eval_mg[WHITE] += count * rook_open_file_bonus[MG];
+    eval_eg[WHITE] += count * rook_open_file_bonus[EG];
+    count = popcount(bitboards[R] & white_semiopen_files);
+    eval_mg[WHITE] += count * rook_semi_open_bonus[MG];
+    eval_mg[WHITE] += count * rook_semi_open_bonus[MG];
+
+    count = popcount(bitboards[r] & open_files);
+    eval_mg[BLACK] += count * rook_open_file_bonus[MG];
+    eval_eg[BLACK] += count * rook_open_file_bonus[EG];
+    count = popcount(bitboards[r] & black_semiopen_files);
+    eval_mg[BLACK] += count * rook_semi_open_bonus[MG];
+    eval_mg[BLACK] += count * rook_semi_open_bonus[MG];
+
+    *mg_score = side_to_move ? (eval_mg[BLACK] - eval_mg[WHITE]) : (eval_mg[WHITE] - eval_mg[BLACK]);
+    *eg_score = side_to_move ? (eval_eg[BLACK] - eval_eg[WHITE]) : (eval_eg[WHITE] - eval_eg[BLACK]);
+
+    if (king_pawn_king(WHITE))
+        *eg_score += UNSTOPPABLE_PASSER;
+    else if (king_pawn_king(BLACK))
+        *eg_score -= UNSTOPPABLE_PASSER;
+}
+
+// Evaluate the current position. If the posititon is good for the side to move, returns a + score
+int eval(int alpha, int beta) {
+
+    // Lazy evaluation based on piece material. If the material score (simple) would put us outside the alpha beta bounds by >600, we return that bound
+    /* int lazy_score = side_to_move ? (material_count[BLACK] - material_count[WHITE]) : (material_count[WHITE] - material_count[BLACK]);
+    if (lazy_score + 600 < alpha)
+        return alpha;
+    if (lazy_score - 600 > beta)
+        return beta; */
+
+
+    int white_piece_scores = 0;
+    int black_piece_scores = 1;
+    // Get the game phase score
+    for (int piece=P; piece <= Q; piece++) {
+        white_piece_scores += popcount(bitboards[piece]) * piece_phase_values[MG][piece];
+        black_piece_scores += popcount(bitboards[6 + piece]) * piece_phase_values[MG][piece];
+    }
+    int game_phase = white_piece_scores + black_piece_scores;
+    const int opening_phase_score = 6192;
+    const int endgame_phase_score = 518;
+
+    int mg_score;
+    int eg_score;
+
+    linear_eval(&mg_score, &eg_score);
+
+    // Material draws
+    if (!bitboards[P] && !bitboards[p]) {
+        if (material_draw())
+            return 0;
+        else if (!bitboards[Q] && !bitboards[q]) {
+            if (!((bitboards[R]) & (bitboards[R]-1)) && !((bitboards[r]) & (bitboards[r]-1)) && bitboards[R] && bitboards[r]) {
+                if ((popcount(bitboards[B] | bitboards[N]) < 1 && !(bitboards[n] | bitboards[b])) || (popcount(bitboards[b] | bitboards[n]) < 1 && !(bitboards[N] | bitboards[B])))
+                    return eg_score / 2;
+            } else if (!((bitboards[R]) & (bitboards[R]-1)) && bitboards[R] && !bitboards[r]) {
+                if (!(bitboards[B] | bitboards[N]) && ((bitboards[n] | bitboards[b]) && popcount(bitboards[n] | bitboards[b]) <= 2))
+                    return eg_score / 2;
+            } else if (!((bitboards[r]) & (bitboards[r]-1)) && bitboards[r] && !bitboards[R]) {
+                if (!(bitboards[b] | bitboards[n]) && ((bitboards[B] | bitboards[N]) && popcount(bitboards[N] | bitboards[B]) <= 2))
+                    return eg_score / 2;
+            }
+        }
+    }
+
     if (game_phase > opening_phase_score)
         return mg_score;
     else if (game_phase < endgame_phase_score)
@@ -314,6 +541,7 @@ int eval(int alpha, int beta) {
     else
         return (mg_score * game_phase + eg_score * (opening_phase_score - game_phase)) / opening_phase_score;
 }
+
 
 // Static exchange evaluation
 

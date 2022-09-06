@@ -54,8 +54,7 @@ int main() {
     init_all();
     init_times();
     if (debug) {
-        parse_fen(kiwipete);
-        parse_go("go infinite");
+        test_games("Titus2.4.abk");
     } else {
         uci();
     }

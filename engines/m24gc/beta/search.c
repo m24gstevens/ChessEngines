@@ -34,12 +34,6 @@ int history_moves[12][64];
 // [piece][to]
 U16 counter_moves[12][64];
 
-// Principal variation scoring
-int pv_length[MAX_PLY];
-U16 pv_table[MAX_PLY][MAX_PLY];
-
-// follow PV flag
-int follow_pv;
 
 void clear_tables() {
     memset(killer_moves, 0, sizeof(killer_moves));
@@ -47,6 +41,13 @@ void clear_tables() {
     memset(pv_length, 0, sizeof(pv_length));
     memset(pv_table, 0, sizeof(pv_table));
     memset(history_moves, 0, sizeof(history_moves));
+}
+
+void adjust_history() {
+    for (int i=0; i<12; i++) {
+        for (int j=0; j<64; j++)
+            history_moves[i][j] /= 2;
+    }
 }
 
 // PV move scoring
@@ -225,7 +226,7 @@ int negamax(int depth, int alpha, int beta) {
     // Check the number of repetitions. If we have repeated the position before, and we aren't at the root,
     // We can assume that the position is a draw (If one side has better, it will be cutoff
     if (ply && reps())
-        return 0;
+        return 0;         // Contempt factor
 
     int hash_flag = HASH_FLAG_ALPHA;
 
@@ -305,7 +306,7 @@ int negamax(int depth, int alpha, int beta) {
                 unmake_move();
                 continue;
             }
-            // Late move pruning
+            //Late move pruning
             if (depth <= 4 && quiet_searched > lmpMargin[depth] && fifty_move > 0) { //Enough quiet moves and not a pawn move
                 unmake_move();
                 continue;
@@ -353,10 +354,6 @@ int negamax(int depth, int alpha, int beta) {
             hash_flag = HASH_FLAG_EXACT;
             // Store the best move (For TT)
             best_move = move;
-            // store history move
-            if (!(move_flags(move) & 0x4)) {
-                history_moves[piece_on_square[move_source(move)]][move_target(move)] += depth;
-            }
             // PV node
             alpha = score;
             // write PV move
@@ -379,6 +376,9 @@ int negamax(int depth, int alpha, int beta) {
                 // Counter moves
                 if (last_move.piece != EMPTY)   // There was a last move
                     counter_moves[last_move.piece][last_move.to] = move;
+                history_moves[piece_on_square[move_source(move)]][move_target(move)] += depth * depth;
+                if (history_moves[piece_on_square[move_source(move)]][move_target(move)] > 80000000)
+                    adjust_history();
             }
             // Fail high
             return beta;
@@ -440,4 +440,41 @@ void search(int depth) {
     print_move(best_found);
     printf("\n");
     return;
+}
+
+void quickgame_search(quickresult_t *result) {
+    int score;
+    int alpha, beta;
+    U16 best_found = 0;
+    // Initial alpha beta bounds
+    alpha = -50000;
+    beta = 50000;
+    //Prepare the search
+    nodes=0;
+    clear_tables();
+    // reset "time is up" flag
+    stopped = 0;
+
+    for (int current_depth = 1; current_depth <= 32; current_depth++) {
+        follow_pv = 1;
+        score = negamax(current_depth,alpha,beta);
+        if ((score <= alpha) || (score >= beta)) {
+            // Fell outside the window; try again with a full-width window, same depth
+            alpha = -50000;
+            beta = 50000;
+            score = negamax(current_depth,alpha,beta);
+        }
+        alpha = score - VALWINDOW;
+        beta = score + VALWINDOW;
+
+        // if time is up
+        if (stopped == 1)
+            break;
+
+        if (pv_length[0]) {
+        }
+        best_found = pv_table[0][0];
+    }
+    result->bestmove = best_found;
+    result->evaluation = score;
 }

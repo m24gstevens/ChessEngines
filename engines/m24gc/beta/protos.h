@@ -33,8 +33,10 @@ U64 random_u64();
 
 // Board Representation
 void print_board();
-void parse_fen(char *fen);
+void parse_fen(char *);
+void get_fen(char *);
 
+void move_to_string(char *, U16);
 void print_move(U16);
 void print_move_stack(int);
 
@@ -56,6 +58,8 @@ void unmake_move();
 void make_null();
 void unmake_null();
 
+int make_random_move();
+
 void perft_test(int);
 void divide(int);
 
@@ -65,6 +69,9 @@ void clear_tables();
 int score_move(U16);
 void score_moves(U16);
 void sort_moves();
+void print_move_scores();
+
+int material_draw();
 
 void init_evaluation_masks();
 
@@ -72,7 +79,7 @@ int eval(int, int);
 int SEE(int, U16);
 
 void search(int);
-void print_move_scores();
+void quickgame_search(quickresult_t *);
 
 U64 fileFill(U64);
 
@@ -101,3 +108,6 @@ void prepare_search();
 void clear_move_stack();
 void clear_history();
 void init_all();
+
+//tuning
+void test_games(const char *);
