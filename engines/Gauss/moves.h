@@ -12,7 +12,7 @@ typedef struct {
 
 typedef struct {
     U8 captured;
-    U8 castling;
+    U8 castle_flags;
     short ep_square;
     int rule50;
 } hist_t;
@@ -30,11 +30,11 @@ typedef struct {
 #define encode_move(move_from, move_to, move_flags) \
     ((move_from) & 0x3F) | (((move_to) << 6) & 0xFC0) | (((move_flags) << 12) & 0xF000)
 
-#define move_from(move) ((move) & 0x3F)
-#define move_to(move) ((move)>>6 & 0x3F)
-#define move_flags(move) ((move)>>12 & 0xF)
-#define is_promotion(move) ((move) & 0x8000)
-#define move_promote_to(move) ((move)>>12 & 0x3)
+#define MOVE_FROM(move) ((move) & 0x3F)
+#define MOVE_TO(move) ((move)>>6 & 0x3F)
+#define MOVE_FLAGS(move) ((move)>>12 & 0xF)
+#define IS_PROMOTION(move) ((move) & 0x8000)
+#define MOVE_PROMOTE_TO(move) ((move)>>12 & 0x3)
 
 extern char* square_strings[64];
 extern char* promoted_pieces;
@@ -44,5 +44,11 @@ void print_move(U16);
 int generate_moves(board_t*, move_t*);
 
 int is_square_attacked(board_t*, enumSquare, enumSide);
+
+int make_move(board_t*, move_t*, hist_t*);
+void unmake_move(board_t*, move_t*, hist_t*);
+
+long perft(board_t*,move_t*,hist_t*,int);
+void divide(board_t*,move_t*,hist_t*,int);
 
 #endif

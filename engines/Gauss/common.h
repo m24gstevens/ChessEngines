@@ -6,6 +6,12 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef _MSC_VER
+    #include <windows.h>
+#else
+    # include <sys/time.h>
+#endif
+
 typedef uint64_t U64;
 typedef uint32_t U32;
 typedef uint16_t U16;
@@ -36,5 +42,13 @@ typedef struct {
 } xorshift32_state;
 
 U64 random_u64_sparse();
+
+extern char *starting_position;
+extern char *kiwipete;
+extern char *cmk_position;
+extern char *headache_position;
+extern char *repetitions;
+
+long get_time_ms();
 
 #endif
