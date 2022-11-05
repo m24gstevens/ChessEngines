@@ -36,6 +36,9 @@ typedef struct {
 #define IS_PROMOTION(move) ((move) & 0x8000)
 #define MOVE_PROMOTE_TO(move) ((move)>>12 & 0x3)
 
+#define NULLMOVE 0
+#define NOMOVE 0xFFFF
+
 extern char* square_strings[64];
 extern char* promoted_pieces;
 

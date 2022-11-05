@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+extern enumPiece char_to_piece_code[];
+
 typedef struct {
     U64 bitboards[12];
     U64 occupancies[3];
@@ -18,6 +20,6 @@ typedef struct {
 
 void print_board(board_t);
 
-void parse_fen(char*, board_t*);
+void parse_fen(board_t*,char*);
 
 #endif

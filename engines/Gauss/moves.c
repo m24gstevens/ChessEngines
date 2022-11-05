@@ -11,61 +11,6 @@ void print_move(U16 move) {
     }
 }
 
-// Parse a move that hasn't been played on the board
-U16 parse_move(char* s, board_t* board) {
-    U16 move = 0;
-    U8 square_from = (s[0]-'a') + 8*(s[1]-'1');
-    U8 square_to = ((s[2]-'a') + 8*(s[3]-'1'));
-    move |= square_from;
-    move |= (U16)square_to << 6;
-    if (board->squares[square_to] != _) {move |= 0x4000;}
-    if (board->squares[square_from]%6==K) {
-        if (square_to - square_from == 2) {move |= 0x2000;}
-        else if (square_from - square_to == 2) {move |= 0x3000;};
-    }
-
-    if (board->squares[square_from]%6==P) {
-        if (board->side==WHITE) {
-            if (square_to > h7) {
-                move |= 0x8000;
-                switch (tolower(s[4])) {
-                    case 'n':
-                        break;
-                    case 'b':
-                        move |= 0x1000;
-                        break;
-                    case 'r':
-                        move |= 0x2000;
-                        break;
-                    default:
-                        move |= 0x3000;
-                }
-            }
-            if (square_to - square_from == 16) {move |= 0x1000;}
-            else if (square_to - square_from != 8 && board->squares[square_to] == _) {move |= 0x5000;}
-        } else {
-            if (square_to < a2) {
-                move |= 0x8000;
-                switch (tolower(s[4])) {
-                    case 'n':
-                        break;
-                    case 'b':
-                        move |= 0x1000;
-                        break;
-                    case 'r':
-                        move |= 0x2000;
-                        break;
-                    default:
-                        move |= 0x3000;
-                }
-            }
-            if (square_from - square_to == 16) {move |= 0x1000;}
-            else if (square_from - square_to != 8 && board->squares[square_to] == _) {move |= 0x5000;}
-        }
-    }
-    return move;
-}
-
 static inline U64 n_attacks(U64 bb) {
     U64 temp = eastOne(bb) | westOne(bb);
     U64 attacks = northTwo(temp) | southTwo(temp);

@@ -52,7 +52,7 @@ void print_board(board_t board) {
         printf("\n");
 }
 
-void parse_fen(char* fen, board_t* board) {
+void parse_fen(board_t* board,char* fen) {
     memset(&board->bitboards,0,sizeof(board->bitboards));
     memset(&board->occupancies,0,sizeof(board->occupancies));
     memset(&board->squares,_,sizeof(board->squares));
