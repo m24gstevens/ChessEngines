@@ -1,5 +1,6 @@
 #include "bitboard.h"
 #include "common.h"
+#include "tt.h"
 
 // Useful positions
 
@@ -98,6 +99,7 @@ long get_time_ms() {
 void init_tables() {
     init_attack_tables();
     init_random_keys();
+    tt_setsize(0x4000000);
 }
 
 // History

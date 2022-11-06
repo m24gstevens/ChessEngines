@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #ifdef _MSC_VER
     #include <windows.h>
@@ -36,6 +37,10 @@ enum castleFlags {WCK=1, WCQ=2, BCK=4, BCQ=8};
 
 #define NOMOVE 0
 #define NULLMOVE 0xFFFF
+
+#define INF 60000
+#define MATE_SCORE 50000
+#define MATE_THRESHOLD 49900
 
 
 typedef uint64_t U64;
@@ -73,8 +78,10 @@ typedef struct {
     move_t* msp[MAXPLY];
     U16 pv[MAXPLY][MAXPLY];
     U16 killers[MAXPLY][2];
+    U16 bestmove;
     int ply;
     long nodes;
+    int sdepth;
 } search_info_t;
 
 typedef struct {
@@ -84,6 +91,28 @@ typedef struct {
     int rule50;
     U64 hash;
 } hist_t;
+
+typedef struct {
+    long time[2];
+    long inc[2];
+    int movestogo;
+    int depth;
+    long nodes;
+    int mate;
+    int movetime;
+    U8 flags;
+    bool stop;
+    long starttime;
+    long stoptime;
+} timeinfo_t;
+
+typedef struct {
+    U64 hash;
+    int val;
+    U16 bestmove;
+    U8 depth;
+    U8 flags;
+} hash_t;
 
 
 #endif

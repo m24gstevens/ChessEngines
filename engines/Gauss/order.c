@@ -28,32 +28,38 @@ void swap_moves(move_t* m1, move_t* m2) {
     m1->score ^= m2->score;
 }
 
-static inline void score_move(board_t* board, search_info_t* si, move_t* move) {
+static inline void score_move(board_t* board, search_info_t* si, move_t* move, U16 pvmove) {
     int score = 0;
     U16 mov = move->move;
     U8 flags = MOVE_FLAGS(mov);
+
+    if (mov == pvmove) {
+        score = PVSCORE;
+        goto scoring;
+    }
+
     if (flags & 0x4) {
-        score += 10000 + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
+        score += CAPSCORE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
     } else {
         if (mov == si->killers[si->ply][0]) {
-            score += 9000;
+            score += KILLER1;
         } else if (mov == si->killers[si->ply][1]) {
-            score += 8000;
+            score += KILLER2;
         }
     }
     if (flags & 0x8) {
         if (flags & 0x3 == 0x3) {
-            score += 5000;
+            score += PROMSCORE;
         }
     }
-
-    move->score = score;
+    scoring:
+        move->score = score;
 }
 
-void score_moves(board_t* board, search_info_t* si, move_t* ms, int nm) {
+void score_moves(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
     int i;
     for (i=0;i<nm;i++) {
-        score_move(board,si,(ms+i));
+        score_move(board,si,(ms+i), pvmove);
     }
 }
 

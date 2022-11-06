@@ -5,6 +5,6 @@
 #include "board.h"
 #include "moves.h"
 
-void search_position(board_t*,int);
+void search_position(board_t*);
 
 #endif
