@@ -105,4 +105,8 @@ void parse_fen(board_t* board,char* fen) {
     board->rule50 = atoi(fen + 2);
     /* occupancies */
     board->occupancies[BOTH] = board->occupancies[WHITE] | board->occupancies[BLACK];
+
+    board->hash = hash_position(board);
+
+    hply=0;
 }

@@ -5,18 +5,6 @@
 #include "board.h"
 #include <ctype.h>
 
-typedef struct {
-    U16 move;
-    //int score;
-} move_t;
-
-typedef struct {
-    U8 captured;
-    U8 castle_flags;
-    short ep_square;
-    int rule50;
-} hist_t;
-
  /* Encode a move in a U16 as follows 
  high bits                      low bits
   0000 0000 0011 1111 - Move from
@@ -36,20 +24,18 @@ typedef struct {
 #define IS_PROMOTION(move) ((move) & 0x8000)
 #define MOVE_PROMOTE_TO(move) ((move)>>12 & 0x3)
 
-#define NULLMOVE 0
-#define NOMOVE 0xFFFF
-
 extern char* square_strings[64];
 extern char* promoted_pieces;
 
 void print_move(U16);
 
 int generate_moves(board_t*, move_t*);
+int generate_captures(board_t*, move_t*);
 
 int is_square_attacked(board_t*, enumSquare, enumSide);
 
-int make_move(board_t*, move_t*, hist_t*);
-void unmake_move(board_t*, move_t*, hist_t*);
+int make_move(board_t*, U16, hist_t*);
+void unmake_move(board_t*, U16, hist_t*);
 
 long perft(board_t*,move_t*,hist_t*,int);
 void divide(board_t*,move_t*,hist_t*,int);

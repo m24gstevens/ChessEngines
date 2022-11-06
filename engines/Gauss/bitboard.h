@@ -6,11 +6,6 @@
 
 // Magic bitboards
 
-typedef struct {
-    U64 mask;
-    U64 magic;
-} MagicInfo;
-
 // Bit macros
 #define GET_LS1B(X) X&-X
 #define POP_LS1B(X) X&=(X-1)

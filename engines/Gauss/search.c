@@ -1,81 +1,94 @@
 #include "search.h"
 #include "eval.h"
+#include "order.h"
 
-move_t best_move;
-int ply;
+static inline void update_pv(search_info_t* si, U16 move, int ply) {
+    int i;
+    si->pv[ply][ply] = move;
+    for (i=ply+1;si->pv[ply+1][i]!=NOMOVE;i++) {si->pv[ply][i] = si->pv[ply+1][i];}
+    si->pv[ply][i] = NOMOVE;
+}
 
-static inline int quiesce(board_t* board, int alpha, int beta) {
-    int in_check, score, nmov, i, ct, stand_pat;
-    move_t best_sofar;
-    int old_alpha = alpha;
+static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, search_info_t* si) {
+    int in_check, score, nmov, i, ct, stand_pat, ply;
+    move_t* mp = msp;
+    U16 move;
+
+    si->nodes++;
 
     stand_pat = evaluate(board);
-
     if (stand_pat >= beta) {return beta;}
-
     if (stand_pat > alpha) {
         alpha=stand_pat;
     }
 
-    move_t move_list[200];
+    ply=si->ply;
+
     hist_t undo;
-    nmov = generate_moves(board, move_list);
+    nmov = generate_captures(board, msp);
+    si->msp[ply+1] = mp+nmov;
+    score_moves(board,si,mp,nmov);
 
-    for (int i=0; i<nmov; i++) {
-        if (!(MOVE_FLAGS((move_list+i)->move) & 0x4) || !make_move(board,move_list+i,&undo)) {continue;}
-        ply++;
-        score = -quiesce(board,-beta,-alpha);
-        unmake_move(board,move_list+i,&undo);
-        ply--;
-
-        if (score >= beta) {return beta;}
+    while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
+        if (!make_move(board,move,&undo)) {continue;}
+        si->ply++;
+        score = -quiesce(board, -beta, -alpha, mp+nmov, si);
+        unmake_move(board,move,&undo);
+        si->ply--;
 
         if (score > alpha) {
             alpha=score;
-            if (ply==0) {
-                best_sofar.move = (move_list+i)->move;
-            }
+            update_pv(si,move,ply);
         }
-    }
-
-    if (old_alpha != alpha) {
-        best_move.move = best_sofar.move;
+        if (score >= beta) {
+            return beta;
+        }
     }
 
     return alpha;
 }
 
-int negamax(board_t* board, int depth, int alpha, int beta) {
-    int score,nmov,ct,i,in_check,legal;
-    move_t best_sofar;
-    int old_alpha = alpha;
+int negamax(board_t* board, int depth, int alpha, int beta, move_t* msp, search_info_t* si) {
+    int score,nmov,ct,i,in_check,legal,ply;
+    move_t* mp = msp;
+    U16 move;
+
+    ply=si->ply;
 
     if (depth==0) {
-        return quiesce(board,alpha,beta);
+        return quiesce(board, alpha, beta, msp, si);
     }
+
+    si->nodes++;
 
     enumSide side = board->side;
     in_check = is_square_attacked(board,bitscanForward(board->bitboards[K+6*side]),1^side);
 
-    move_t move_list[200];
     hist_t undo;
-    nmov = generate_moves(board, move_list);
+    nmov = generate_moves(board, msp);
+    si->msp[ply+1] = mp+nmov;
+    score_moves(board,si,mp,nmov);
+    
     legal=0;
-    for (int i=0; i<nmov; i++) {
-        if (!make_move(board,move_list+i,&undo)) {continue;}
-        ply++;
-        score = -negamax(board,depth-1,-beta,-alpha);
-        legal++;
-        unmake_move(board,move_list+i,&undo);
-        ply--;
 
-        if (score >= beta) {return beta;}
+    while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
+        if (!make_move(board,move,&undo)) {continue;}
+        si->ply++;
+        score = -negamax(board, depth-1, -beta, -alpha, mp+nmov, si);
+        legal++;
+        unmake_move(board,move,&undo);
+        si->ply--;
 
         if (score > alpha) {
             alpha=score;
-            if (ply==0) {
-                best_sofar.move = (move_list+i)->move;
+            update_pv(si,move,ply);
+        }
+        if (score >= beta) {
+            if (!MOVE_FLAGS(move) & 0x4) {
+                si->killers[1][ply] = si->killers[0][ply];
+                si->killers[0][ply] = move;
             }
+            return beta;
         }
     }
 
@@ -83,17 +96,18 @@ int negamax(board_t* board, int depth, int alpha, int beta) {
         return in_check ? -49000+ply : 0;
     }
 
-    if (old_alpha != alpha) {
-        best_move.move = best_sofar.move;
-    }
-
     return alpha;
 }
 
 void search_position(board_t* board, int depth) {
-    ply=0;
-    int score = negamax(board,depth,-50000,50000);
+    move_t movestack[MAXMOVES];
+    search_info_t si;
+    si.ply = 0;
+    si.nodes = 0L;
+    si.msp[0] = movestack;
+    int score = negamax(board,depth,-50000,50000,&movestack[0],&si);
     printf("bestmove ");
-    print_move(best_move.move);
+    print_move(si.pv[0][0]);
     printf("\n");
+    printf("info depth %d nodes %ld\n",depth,si.nodes);
 }

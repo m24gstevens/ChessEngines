@@ -29,7 +29,7 @@ U16 parse_move(board_t* board, char* s) {
 
 // Parse a UCI 'position' command
 void parse_position(board_t* board, char* command) {
-    move_t move = {.move=NOMOVE};
+    U16 mov = NOMOVE;
     hist_t undo;
     char* curr = command;
     curr += 9;
@@ -51,9 +51,10 @@ void parse_position(board_t* board, char* command) {
         while (*curr) {
             if (*curr == '\n') {break;}
 
-            move.move = parse_move(board,curr);
-            if (move.move == NOMOVE) {break;}
-            make_move(board,&move,&undo);
+            mov = parse_move(board,curr);
+            if (mov == NOMOVE) {break;}
+            history_table[hply++] = board->hash;
+            make_move(board,mov,&undo);
 
             while (*curr && *curr != ' ') curr++;
             curr++;
@@ -72,7 +73,7 @@ void parse_go(board_t* board, char* command) {
     } else {
         depth = 3;
     }
-    search_position(board,4);
+    search_position(board,depth);
 }
 
 void uci_loop(board_t* board) {

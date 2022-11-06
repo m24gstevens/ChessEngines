@@ -6,7 +6,7 @@
 #include "uci.h"
 
 int main() {
-    init_attack_tables();
+    init_tables();
     board_t board;
     int debug=0;
     if (debug) {
