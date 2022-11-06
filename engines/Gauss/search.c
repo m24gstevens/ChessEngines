@@ -4,6 +4,16 @@
 #include "uci.h"
 #include "tt.h"
 
+void prepare_search(search_info_t* si) {
+    int i,j;
+    for (i=0;i<12;i++) {
+        for (j=0;j<64;j++) {
+            si->counter_moves[i][j].piece = _;
+            si->counter_moves[i][j].to = 0;
+        }
+    }
+}
+
 static inline void update_pv(search_info_t* si, U16 move, int ply) {
     int i;
     si->pv[ply][ply] = move;
@@ -73,6 +83,7 @@ static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, sear
 int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_info_t* si, bool is_pv) {
     int score,nmov,ct,i,in_check,legal,ply;
     move_t* mp = msp;
+    hist_t undo;
     U16 move, pvmove=NOMOVE,bestmove;
     U8 ttflag = TT_ALPHA;
     bool next_pv;
@@ -100,7 +111,13 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
     enumSide side = board->side;
     in_check = is_square_attacked(board,bitscanForward(board->bitboards[K+6*side]),1^side);
 
-    hist_t undo;
+    if (depth >= 3 && !in_check && ply) {
+        make_null(board, &undo);
+        score = -search(board, depth-1-NULLMOVE_REDUCTION, -beta, -beta+1, msp, si, 0);
+        unmake_null(board,&undo);
+        if (score >= beta) {return beta;}
+    }
+
     nmov = generate_moves(board, msp);
     si->msp[ply+1] = mp+nmov;
     score_moves(board,si,mp,nmov,pvmove);
@@ -123,9 +140,15 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
             update_pv(si,move,ply);
         }
         if (score >= beta) {
-            if (!MOVE_FLAGS(move) & 0x4) {
+            if (!IS_CAPTURE(move)) {
                 si->killers[1][ply] = si->killers[0][ply];
                 si->killers[0][ply] = move;
+                if (board->last_move.piece != _) {
+                    si->counter_moves[board->last_move.piece][board->last_move.to].piece = board->squares[MOVE_FROM(move)];
+                    si->counter_moves[board->last_move.piece][board->last_move.to].to = MOVE_TO(move);
+                }
+                history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] += depth*depth;
+                if (history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] > SCORE_HIST_MAX) {half_history();}
             }
             ttflag = TT_BETA;
             alpha = beta;
@@ -212,6 +235,7 @@ void iterative_deepening(board_t* board) {
     U16 best;
 
     search_info_t si;
+    prepare_search(&si);
     si.ply = 0;
     si.nodes = 0L;
     si.bestmove = NOMOVE;
@@ -230,5 +254,6 @@ void iterative_deepening(board_t* board) {
 
 void search_position(board_t* board) {
     time_calc();
+    age_history();
     iterative_deepening(board);
 }

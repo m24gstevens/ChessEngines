@@ -1,5 +1,6 @@
 #include "board.h"
 #include "common.h"
+#include "order.h"
 
 char *piece_characters = "KPNBRQkpnbrq.";
 enumPiece char_to_piece_code[] = {
@@ -108,5 +109,6 @@ void parse_fen(board_t* board,char* fen) {
 
     board->hash = hash_position(board);
 
+    clear_history();
     hply=0;
 }

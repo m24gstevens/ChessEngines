@@ -121,7 +121,7 @@ void parse_position(board_t* board, char* command) {
 
             mov = parse_move(board,curr);
             if (mov == NOMOVE) {break;}
-            history_table[hply++] = board->hash;
+            game_history[hply++] = board->hash;
             make_move(board,mov,&undo);
 
             while (*curr && *curr != ' ') curr++;

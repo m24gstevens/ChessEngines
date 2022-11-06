@@ -32,7 +32,7 @@ void init_tables();
 
 // History
 
-extern U64 history_table[MAXHIST];
+extern U64 game_history[MAXHIST];
 extern int hply;
 
 #endif

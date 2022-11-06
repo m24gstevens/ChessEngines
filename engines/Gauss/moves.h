@@ -22,6 +22,7 @@
 #define MOVE_TO(move) ((move)>>6 & 0x3F)
 #define MOVE_FLAGS(move) ((move)>>12 & 0xF)
 #define IS_PROMOTION(move) ((move) & 0x8000)
+#define IS_CAPTURE(move) ((move) & 0x4000)
 #define MOVE_PROMOTE_TO(move) ((move)>>12 & 0x3)
 
 extern char* square_strings[64];
@@ -36,6 +37,9 @@ int is_square_attacked(board_t*, enumSquare, enumSide);
 
 int make_move(board_t*, U16, hist_t*);
 void unmake_move(board_t*, U16, hist_t*);
+
+void make_null(board_t*, hist_t*);
+void unmake_null(board_t*, hist_t*);
 
 long perft(board_t*,move_t*,hist_t*,int);
 void divide(board_t*,move_t*,hist_t*,int);

@@ -1,5 +1,31 @@
 #include "order.h"
 
+int history_table[2][64][64];
+
+void clear_history() {
+    memset(history_table,0,sizeof(int)*2*64*64);
+}
+
+void age_history() {
+    for (int i=0; i<2; i++) {
+        for (int j=0; j<64; j++) {
+            for (int k=0; k<64; k++) {
+                history_table[i][j][k] = history_table[i][j][k] / 8;
+            }
+        }
+    }
+}
+
+void half_history() {
+    for (int i=0; i<2; i++) {
+        for (int j=0; j<64; j++) {
+            for (int k=0; k<64; k++) {
+                history_table[i][j][k] = history_table[i][j][k] / 2;
+            }
+        }
+    }
+}
+
 const int MVV_LVA[13][12] = {
     60,65,64,63,62,61, 60,65,64,63,62,61,
     10,15,14,13,12,11, 10,15,14,13,12,11,
@@ -34,22 +60,31 @@ static inline void score_move(board_t* board, search_info_t* si, move_t* move, U
     U8 flags = MOVE_FLAGS(mov);
 
     if (mov == pvmove) {
-        score = PVSCORE;
+        score = SCORE_PV;
         goto scoring;
     }
 
     if (flags & 0x4) {
-        score += CAPSCORE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
+        score += SCORE_CAPTURE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
     } else {
         if (mov == si->killers[si->ply][0]) {
-            score += KILLER1;
+            score = SCORE_KILLER1;
         } else if (mov == si->killers[si->ply][1]) {
-            score += KILLER2;
+            score = SCORE_KILLER2;
+        } else if (board->last_move.piece != _) {
+            if (((int)si->counter_moves[board->last_move.piece][board->last_move.to].piece == board->squares[MOVE_FROM(mov)])
+                && ((int)si->counter_moves[board->last_move.piece][board->last_move.to].piece == MOVE_TO(mov))) {
+                score = SCORE_COUNTER;
+            }
+        } else {
+            score = history_table[board->side][MOVE_FROM(mov)][MOVE_TO(mov)];
         }
     }
     if (flags & 0x8) {
         if (flags & 0x3 == 0x3) {
-            score += PROMSCORE;
+            score = SCORE_PROMOTE;
+        } else {
+            score = SCORE_UNDERPROM;
         }
     }
     scoring:

@@ -336,6 +336,7 @@ int make_move(board_t* board, U16 mov, hist_t* undo) {
     undo->castle_flags = board->castle_flags;
     undo->rule50 = board->rule50;
     undo->hash = board->hash;
+    undo->last_move = board->last_move;
     // Update occupancies
     board->bitboards[moved] ^= from_to_bb;
     board->occupancies[side] ^= from_to_bb;
@@ -406,6 +407,8 @@ int make_move(board_t* board, U16 mov, hist_t* undo) {
     board->castle_flags &= castling_rights_update[from];
     board->castle_flags &= castling_rights_update[to];
     hash ^= castle_keys[board->castle_flags];
+    board->last_move.piece = moved;
+    board->last_move.to = to;
 
     if ((flags & 0x4) || (moved == P) || (moved == p)) {board->rule50 = 0;}
     else {board->rule50++;}
@@ -449,6 +452,7 @@ void unmake_move(board_t* board,U16 mov, hist_t* undo) {
     board->squares[to] = _;
     board->squares[from] = moved;
     board->hash = undo->hash;
+    board->last_move = undo->last_move;
 
     // Captures incl. EP
     if (flags & 0x4) {
@@ -496,6 +500,33 @@ void unmake_move(board_t* board,U16 mov, hist_t* undo) {
     board->castle_flags = undo->castle_flags;
     board->ep_square = undo->ep_square;
     board->rule50 = undo->rule50;
+    board->side ^= 1;
+}
+
+// Make a "null" move
+void make_null(board_t* board, hist_t* undo) {
+    undo->captured = 0;
+    undo->ep_square = board->ep_square;
+    undo->castle_flags = board->castle_flags;
+    undo->rule50 = board->rule50;
+    undo->hash = board->hash;
+    undo->last_move = board->last_move;
+
+    if (board->ep_square != -1) {
+        board->hash ^= ep_keys[board->side][board->ep_square % 8];
+    }
+    board->hash ^= side_key;
+    board->ep_square = -1;
+    board->side ^= 1;
+}
+
+// Unmake a "null" move
+void unmake_null(board_t* board, hist_t* undo) {
+    board->ep_square = undo->ep_square;
+    board->castle_flags = undo->castle_flags;
+    board->rule50 = undo->rule50;
+    board->last_move = undo->last_move;
+    board->hash = undo->hash;
     board->side ^= 1;
 }
 

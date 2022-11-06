@@ -59,6 +59,11 @@ typedef struct {
 } xorshift32_state;
 
 typedef struct {
+    enumPiece piece;
+    enumSquare to;
+} counter_move_t;
+
+typedef struct {
     U64 bitboards[12];
     U64 occupancies[3];
     U8 squares[64];
@@ -67,6 +72,7 @@ typedef struct {
     enumSide side;
     int rule50;
     U64 hash;
+    counter_move_t last_move;
 } board_t;
 
 typedef struct {
@@ -78,6 +84,7 @@ typedef struct {
     move_t* msp[MAXPLY];
     U16 pv[MAXPLY][MAXPLY];
     U16 killers[MAXPLY][2];
+    counter_move_t counter_moves[12][64];
     U16 bestmove;
     int ply;
     long nodes;
@@ -90,6 +97,7 @@ typedef struct {
     short ep_square;
     int rule50;
     U64 hash;
+    counter_move_t last_move;
 } hist_t;
 
 typedef struct {
