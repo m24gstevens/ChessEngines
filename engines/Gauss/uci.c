@@ -98,6 +98,7 @@ U16 parse_move(board_t* board, char* s) {
 // Parse a UCI 'position' command
 void parse_position(board_t* board, char* command) {
     U16 mov = NOMOVE;
+    int hply = 0;
     hist_t undo;
     char* curr = command;
     curr += 9;
@@ -121,13 +122,14 @@ void parse_position(board_t* board, char* command) {
 
             mov = parse_move(board,curr);
             if (mov == NOMOVE) {break;}
-            game_history[hply++] = board->hash;
+            board->game_history[hply++] = board->hash;
             make_move(board,mov,&undo);
 
             while (*curr && *curr != ' ') curr++;
             curr++;
         }
     }
+    board->hply = hply;
 }
 
 void parse_go(board_t* board, char* command) {

@@ -42,6 +42,8 @@ enum castleFlags {WCK=1, WCQ=2, BCK=4, BCQ=8};
 #define MATE_SCORE 50000
 #define MATE_THRESHOLD 49900
 
+#define MAX(X,Y) ((X)<(Y) ? (Y) : (X))
+
 
 typedef uint64_t U64;
 typedef uint32_t U32;
@@ -73,6 +75,8 @@ typedef struct {
     int rule50;
     U64 hash;
     counter_move_t last_move;
+    U64 game_history[MAXHIST];
+    int hply;
 } board_t;
 
 typedef struct {

@@ -103,6 +103,3 @@ void init_tables() {
 }
 
 // History
-
-U64 game_history[MAXHIST];
-int hply;

@@ -110,5 +110,11 @@ void parse_fen(board_t* board,char* fen) {
     board->hash = hash_position(board);
 
     clear_history();
-    hply=0;
+    board->hply=0;
+}
+
+void setup_board(board_t* board) {
+    board->hply = 0;
+    board->last_move.piece = _;
+    board->last_move.to = a1;
 }

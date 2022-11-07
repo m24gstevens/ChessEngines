@@ -1,4 +1,5 @@
 #include "order.h"
+#include "see.h"
 
 int history_table[2][64][64];
 
@@ -54,8 +55,24 @@ void swap_moves(move_t* m1, move_t* m2) {
     m1->score ^= m2->score;
 }
 
+static inline void score_qsearch(board_t* board, search_info_t* si, move_t* move, U16 pvmove) {
+    int score = 0, see;
+    U16 mov = move->move;
+    
+    if (mov == pvmove) {score = SCORE_PV;}
+    else {
+        see = SEE(board,board->side,mov);
+        if (see > 0) {score = SCORE_WCAPTURE;}
+        else if (see == 0) {score = SCORE_CAPTURE;}
+        else {score = SCORE_LCAPTURE;}
+        score += MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
+    }
+
+    move->score = score;
+}
+
 static inline void score_move(board_t* board, search_info_t* si, move_t* move, U16 pvmove) {
-    int score = 0;
+    int score = 0, see;
     U16 mov = move->move;
     U8 flags = MOVE_FLAGS(mov);
 
@@ -65,7 +82,7 @@ static inline void score_move(board_t* board, search_info_t* si, move_t* move, U
     }
 
     if (flags & 0x4) {
-        score += SCORE_CAPTURE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
+        score = SCORE_WCAPTURE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
     } else {
         if (mov == si->killers[si->ply][0]) {
             score = SCORE_KILLER1;
@@ -91,6 +108,13 @@ static inline void score_move(board_t* board, search_info_t* si, move_t* move, U
         move->score = score;
 }
 
+void score_moves_qsearch(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
+    int i;
+    for (i=0;i<nm;i++) {
+        score_qsearch(board,si,(ms+i), pvmove);
+    }
+}
+
 void score_moves(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
     int i;
     for (i=0;i<nm;i++) {
@@ -110,5 +134,21 @@ U16 pick_move(move_t* ms, int nm) {
         }
     }
     if (best_idx != 0) {swap_moves(ms,ms+best_idx);}
+    return ms->move;
+}
+
+U16 pick_move_qsearch(move_t* ms, int nm) {
+    if (!nm) {return NOMOVE;}
+
+    int best_score = -1;
+    int best_idx = -1;
+    for (int i=0;i<nm;i++) {
+        if ((ms+i)->score > best_score) {
+            best_score = (ms+i)->score;
+            best_idx = i;
+        }
+    }
+    if (best_idx != 0) {swap_moves(ms,ms+best_idx);}
+    if (ms->score < SCORE_CAPTURE) {return NOMOVE;}
     return ms->move;
 }

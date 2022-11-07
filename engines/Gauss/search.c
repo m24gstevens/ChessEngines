@@ -3,6 +3,7 @@
 #include "order.h"
 #include "uci.h"
 #include "tt.h"
+#include "see.h"
 
 void prepare_search(search_info_t* si) {
     int i,j;
@@ -12,6 +13,7 @@ void prepare_search(search_info_t* si) {
             si->counter_moves[i][j].to = 0;
         }
     }
+    memset(si->pv,0,sizeof(U16)*MAXPLY*MAXPLY);
 }
 
 static inline void update_pv(search_info_t* si, U16 move, int ply) {
@@ -24,19 +26,13 @@ static inline void update_pv(search_info_t* si, U16 move, int ply) {
 static inline void info_pv(board_t* board, search_info_t* si) {
     int d;
     U16 best;
-    board_t bc = *board;
-    hist_t undo;
 
+    best = si->bestmove;
+    d=0;
     printf("info pv ");
-    for (d=0;d<si->sdepth;d++) {
-        best = NOMOVE;
-        probe_tt(&bc,d,0,0,0,&best);
-
-        if (best == NOMOVE) {break;}
+    while (((best = si->pv[0][d++]) != NOMOVE) && (d < si->sdepth)) {
         print_move(best);
         printf(" ");
-
-        make_move(&bc,best,&undo);
     }
     printf("\n");
 }
@@ -59,10 +55,11 @@ static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, sear
     hist_t undo;
     nmov = generate_captures(board, msp);
     si->msp[ply+1] = mp+nmov;
-    score_moves(board,si,mp,nmov,NOMOVE);
+    score_moves_qsearch(board,si,mp,nmov,NOMOVE);
 
     while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
         if (!make_move(board,move,&undo)) {continue;}
+
         si->ply++;
         score = -quiesce(board, -beta, -alpha, mp+nmov, si);
         unmake_move(board,move,&undo);
@@ -81,15 +78,22 @@ static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, sear
 }
 
 int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_info_t* si, bool is_pv) {
-    int score,nmov,ct,i,in_check,legal,ply;
+    int score,nmov,ct,i,in_check,tried,ply,new_depth,reduction;
     move_t* mp = msp;
     hist_t undo;
     U16 move, pvmove=NOMOVE,bestmove;
     U8 ttflag = TT_ALPHA;
-    bool next_pv;
+    bool next_pv, raised_alpha;
 
     if (!(si->nodes & 2047)) { communicate(si);}
     if (time_control.stop) {return 0;}
+
+    if (alpha >= beta) {return alpha;}
+
+    if (is_draw(board,si)) {
+        si->nodes++;
+        return 0;
+    }
 
     ply=si->ply;
     if (ply > MAXPLY - 1) {
@@ -100,13 +104,13 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
         return quiesce(board, alpha, beta, msp, si);
     }
 
+    si->nodes++;
+
     if ((score = probe_tt(board,ply,depth,alpha,beta,&pvmove)) != INVALID) {
         if (!is_pv || (score > alpha && score < beta)) {
             return score;
         }
     }
-
-    si->nodes++;
 
     enumSide side = board->side;
     in_check = is_square_attacked(board,bitscanForward(board->bitboards[K+6*side]),1^side);
@@ -122,14 +126,46 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
     si->msp[ply+1] = mp+nmov;
     score_moves(board,si,mp,nmov,pvmove);
     
-    legal=0;
+    tried=0;
+    raised_alpha=false;
 
     while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
         if (!make_move(board,move,&undo)) {continue;}
+        tried++;
         si->ply++;
-        next_pv = (move == pvmove) & is_pv;
-        score = -search(board, depth-1, -beta, -alpha, mp+nmov, si,next_pv);
-        legal++;
+
+        // Reductions
+        new_depth = depth - 1;
+        reduction = 0;
+
+        if (!is_pv
+        && new_depth > 3
+        && tried > 3
+        && !IS_CAPTURE(move)
+        && !IS_PROMOTION(move)
+        && !in_check) {
+            reduction = 1;
+            if (tried > 6) {reduction++;}
+            new_depth -= reduction;
+        }
+
+        pvs:
+
+        if (!raised_alpha) {
+            score = -search(board, new_depth, -beta, -alpha, mp+nmov, si,is_pv);
+        } else {
+            score = -search(board, new_depth, -alpha-1, -alpha, mp+nmov, si,false);
+            if (score > alpha) {
+                score = -search(board, new_depth, -beta, -alpha, mp+nmov, si,true);
+            }
+        }
+
+        if (reduction && score > alpha) {
+            new_depth += reduction;
+            reduction = 0;
+            goto pvs;
+        }
+
         unmake_move(board,move,&undo);
         si->ply--;
 
@@ -137,26 +173,27 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
             alpha=score;
             bestmove = move;
             ttflag = TT_EXACT;
+            raised_alpha=true;
             update_pv(si,move,ply);
-        }
-        if (score >= beta) {
-            if (!IS_CAPTURE(move)) {
-                si->killers[1][ply] = si->killers[0][ply];
-                si->killers[0][ply] = move;
-                if (board->last_move.piece != _) {
-                    si->counter_moves[board->last_move.piece][board->last_move.to].piece = board->squares[MOVE_FROM(move)];
-                    si->counter_moves[board->last_move.piece][board->last_move.to].to = MOVE_TO(move);
+            if (score >= beta) {
+                if (!IS_CAPTURE(move)) {
+                    si->killers[1][ply] = si->killers[0][ply];
+                    si->killers[0][ply] = move;
+                    if (board->last_move.piece != _) {
+                        si->counter_moves[board->last_move.piece][board->last_move.to].piece = board->squares[MOVE_FROM(move)];
+                        si->counter_moves[board->last_move.piece][board->last_move.to].to = MOVE_TO(move);
+                    }
+                    history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] += depth*depth;
+                    if (history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] > SCORE_HIST_MAX) {half_history();}
                 }
-                history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] += depth*depth;
-                if (history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] > SCORE_HIST_MAX) {half_history();}
+                ttflag = TT_BETA;
+                alpha = beta;
+                break;
             }
-            ttflag = TT_BETA;
-            alpha = beta;
-            break;
         }
     }
 
-    if (legal==0) {
+    if (tried==0) {
         return in_check ? -MATE_SCORE+ply : 0;
     }
 

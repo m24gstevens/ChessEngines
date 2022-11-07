@@ -10,4 +10,6 @@ void print_board(board_t);
 
 void parse_fen(board_t*,char*);
 
+void setup_board(board_t*);
+
 #endif

@@ -220,11 +220,6 @@ int generate_captures(board_t* board, move_t* ms) {
             POP_LS1B(open);
             for (int p=0;p<4;p++) {(ms + (ct++))->move = encode_move(from,to,12+p);}
         }
-
-        to=from+8*(1-2*side);
-        if (board->squares[to]==_) {
-            for (int p=0;p<4;p++) {(ms + (ct++))->move = encode_move(from,to,8+p);}
-        }
     }
 
     // King moves
