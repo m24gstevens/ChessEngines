@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #ifdef _MSC_VER
     #include <windows.h>
@@ -125,6 +126,17 @@ typedef struct {
     U8 depth;
     U8 flags;
 } hash_t;
+
+typedef struct {
+    U64 hash;
+    int evaluation;
+    bool valid;
+} hash_eval_t;
+
+typedef struct {
+    U8 mob;
+    U8 trop;
+} piece_eval_t;
 
 
 #endif

@@ -118,7 +118,7 @@ void score_moves_qsearch(board_t* board, search_info_t* si, move_t* ms, int nm, 
 void score_moves(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
     int i;
     for (i=0;i<nm;i++) {
-        score_move(board,si,(ms+i), pvmove);
+        score_move(board,si,(ms+i),pvmove);
     }
 }
 

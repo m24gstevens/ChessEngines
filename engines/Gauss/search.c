@@ -59,7 +59,7 @@ static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, sear
 
     while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
         if (!make_move(board,move,&undo)) {continue;}
-
+        //if ((!IS_PROMOTION(move)) && (stand_pat + simple_piece_values[board->squares[MOVE_TO(move)]] + 200 < alpha)) {continue;}
         si->ply++;
         score = -quiesce(board, -beta, -alpha, mp+nmov, si);
         unmake_move(board,move,&undo);
@@ -77,8 +77,88 @@ static inline int quiesce(board_t* board, int alpha, int beta, move_t* msp, sear
     return alpha;
 }
 
+U16 internalID(board_t* board, int depth, int alpha, int beta, move_t* msp, search_info_t* si) {
+    int search(board_t*, int, int, int, move_t*, search_info_t*, bool);
+    int score,nmov,ct,i,in_check,tried,ply,new_depth,reduction,eval;
+    move_t* mp = msp;
+    hist_t undo;
+    U16 move, best_result=NOMOVE;
+    U8 hash_flag = TT_ALPHA;
+
+    if (!(si->nodes & 2047)) { communicate(si);}
+    if (time_control.stop) {return 0;}
+
+    si->nodes++;
+
+    nmov = generate_moves(board, msp);
+    si->msp[ply+1] = mp+nmov;
+    score_moves(board, si, mp, nmov, si->pv[0][ply]);
+    
+    tried=0;
+
+    while ((move = pick_move(mp++,nmov--)) != NOMOVE) {
+        if (!make_move(board,move,&undo)) {continue;}
+        tried++;
+        si->ply++;
+        reduction = 0;
+        new_depth = depth-1;
+
+        if (new_depth >= 2
+            && tried > 3
+            && !IS_PROMOTION(move)
+            && !IS_CAPTURE(move)) {
+                reduction = 1;
+                if (tried > 3) {reduction++;}
+                if (move == si->killers[ply][0] || move == si->killers[ply][1]) {reduction--;}
+
+                new_depth -= reduction;
+        }
+
+        if (tried == 1) {
+            score = -search(board,new_depth,-beta,-alpha,mp+nmov, si,true);
+        } else {
+            score = -search(board, new_depth, -alpha-1, -alpha, mp+nmov, si,false);
+            if (reduction && score > alpha) {
+                new_depth += reduction;
+                score = -search(board, new_depth, -alpha-1, -alpha, mp+nmov, si,false);
+            }
+            if (score > alpha && score < beta) {
+                score = -search(board, new_depth, -beta, -alpha, mp+nmov, si,true);
+            }
+        }
+
+        if (score > alpha) {
+            alpha = score;
+            best_result = move;
+            hash_flag = TT_EXACT;
+            if (score >= beta) {
+                if (!IS_CAPTURE(move)) {
+                    si->killers[1][ply] = si->killers[0][ply];
+                    si->killers[0][ply] = move;
+                    if (board->last_move.piece != _) {
+                        si->counter_moves[board->last_move.piece][board->last_move.to].piece = board->squares[MOVE_FROM(move)];
+                        si->counter_moves[board->last_move.piece][board->last_move.to].to = MOVE_TO(move);
+                    }
+                    history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] += depth*depth;
+                    if (history_table[board->side][MOVE_FROM(move)][MOVE_TO(move)] > SCORE_HIST_MAX) {half_history();}
+                }
+                hash_flag = TT_BETA;
+                break;
+            }
+        }
+
+    }
+
+    if (!tried) {return NOMOVE;}
+    store_tt(board,depth,ply,alpha,hash_flag,best_result);
+
+    return best_result;
+
+
+}
+
 int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_info_t* si, bool is_pv) {
-    int score,nmov,ct,i,in_check,tried,ply,new_depth,reduction;
+    int score,nmov,ct,i,in_check,tried,ply,new_depth,reduction,eval;
     move_t* mp = msp;
     hist_t undo;
     U16 move, pvmove=NOMOVE,bestmove;
@@ -104,6 +184,19 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
         return quiesce(board, alpha, beta, msp, si);
     }
 
+    eval = evaluate(board);
+
+    if (depth == 1 && eval <= alpha - 300) {
+        return quiesce(board, alpha, beta, msp, si);
+    }
+
+    if (depth <= 7 && abs(beta) < 19000) {
+        int margin = 120 * depth;
+        if (eval - margin >= beta) {
+            return beta;
+        }
+    }
+
     si->nodes++;
 
     if ((score = probe_tt(board,ply,depth,alpha,beta,&pvmove)) != INVALID) {
@@ -122,9 +215,13 @@ int search(board_t* board, int depth, int alpha, int beta, move_t* msp, search_i
         if (score >= beta) {return beta;}
     }
 
+    if (is_pv && !in_check && depth>=6 && pvmove==NOMOVE) {
+        pvmove = internalID(board,depth-depth/4-1,alpha,beta,mp,si);
+    } 
+
     nmov = generate_moves(board, msp);
     si->msp[ply+1] = mp+nmov;
-    score_moves(board,si,mp,nmov,pvmove);
+    score_moves(board, si, mp, nmov, si->pv[0][ply]);
     
     tried=0;
     raised_alpha=false;
@@ -219,7 +316,7 @@ int search_root(board_t* board, int depth, int alpha, int beta, search_info_t* s
     hist_t undo;
     nmov = generate_moves(board, movestack);
     si->msp[1] = mp+nmov;
-    score_moves(board,si,mp,nmov,si->bestmove);
+    score_moves(board, si, mp, nmov, si->bestmove);
     
     legal=0;
 
