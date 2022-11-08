@@ -22,7 +22,7 @@ extern timeinfo_t time_control;
 
 bool time_stop_root(search_info_t* si);
 void communicate(search_info_t*);
-void time_calc();
+void time_calc(board_t*);
 
 
 void send_move(U16);

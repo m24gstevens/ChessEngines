@@ -4,9 +4,12 @@
 #include "common.h"
 #include "board.h"
 #include "bitboard.h"
+#include "math.h"
 
 #define MG 0
 #define EG 1
+
+#define DISTANCE(s1,s2) (abs((s1>>3) - (s2>>3)) + abs((s1&7)-(s2&7)))
 
 #define EGTHRESH 2580
 #define MGTHRESH 5480

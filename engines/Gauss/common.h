@@ -7,9 +7,8 @@
 
 extern char *starting_position;
 extern char *kiwipete;
-extern char *cmk_position;
-extern char *headache_position;
-extern char *repetitions;
+extern char *capture_position;
+extern char *unsafe_king;
 
 // PRNG
 

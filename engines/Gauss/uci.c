@@ -67,6 +67,7 @@ void time_calc(board_t* board) {
     } else {
         time_control.stoptime = time_control.starttime;
     }
+    printf("info starttime %d stoptime %d\n", time_control.starttime, time_control.stoptime);
     return;
 }
 

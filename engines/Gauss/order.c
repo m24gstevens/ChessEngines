@@ -1,31 +1,8 @@
 #include "order.h"
 #include "see.h"
 
-int history_table[2][64][64];
-
-void clear_history() {
-    memset(history_table,0,sizeof(int)*2*64*64);
-}
-
-void age_history() {
-    for (int i=0; i<2; i++) {
-        for (int j=0; j<64; j++) {
-            for (int k=0; k<64; k++) {
-                history_table[i][j][k] = history_table[i][j][k] / 8;
-            }
-        }
-    }
-}
-
-void half_history() {
-    for (int i=0; i<2; i++) {
-        for (int j=0; j<64; j++) {
-            for (int k=0; k<64; k++) {
-                history_table[i][j][k] = history_table[i][j][k] / 2;
-            }
-        }
-    }
-}
+// history_heuristic[side][from][to]
+int history_heuristic[2][64][64];
 
 const int MVV_LVA[13][12] = {
     60,65,64,63,62,61, 60,65,64,63,62,61,
@@ -45,6 +22,38 @@ const int MVV_LVA[13][12] = {
     10,15,14,13,12,11, 10,15,14,13,12,11,
 };
 
+void clear_history_heuristic() {
+    memset(history_heuristic,0,sizeof(int)*2*64*64);
+}
+
+void age_history_heuristic() {
+    for (int i=0; i<2; i++) {
+        for (int j=0; j<64; j++) {
+            for (int k=0; k<64; k++) {
+                history_heuristic[i][j][k] >>= 4;
+            }
+        }
+    }
+}
+
+void calibrate_history_heuristic() {
+    for (int i=0; i<2; i++) {
+        for (int j=0; j<64; j++) {
+            for (int k=0; k<64; k++) {
+                history_heuristic[i][j][k] >>= 1;
+            }
+        }
+    }
+}
+
+
+void scores_cutoff(board_t* board, search_info_t* si, U16 move, int depth) {
+    si->killers[1][si->ply] = si->killers[0][si->ply];
+    si->killers[0][si->ply] = move;
+    history_heuristic[board->side][MOVE_FROM(move)][MOVE_TO(move)] += depth*depth;
+    if (history_heuristic[board->side][MOVE_FROM(move)][MOVE_TO(move)] > SCORE_HIST_MAX) {calibrate_history_heuristic();}
+}
+
 void swap_moves(move_t* m1, move_t* m2) {
     m1->move ^= m2->move;
     m2->move ^= m1->move;
@@ -55,100 +64,62 @@ void swap_moves(move_t* m1, move_t* m2) {
     m1->score ^= m2->score;
 }
 
-static inline void score_qsearch(board_t* board, search_info_t* si, move_t* move, U16 pvmove) {
-    int score = 0, see;
-    U16 mov = move->move;
-    
-    if (mov == pvmove) {score = SCORE_PV;}
-    else {
-        see = SEE(board,board->side,mov);
-        if (see > 0) {score = SCORE_WCAPTURE;}
-        else if (see == 0) {score = SCORE_CAPTURE;}
-        else {score = SCORE_LCAPTURE;}
-        score += MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
-    }
+void score_move(board_t* board, search_info_t* si, move_t* mp, U16 pvmove) {
+    int score = 0;
 
-    move->score = score;
-}
-
-static inline void score_move(board_t* board, search_info_t* si, move_t* move, U16 pvmove) {
-    int score = 0, see;
-    U16 mov = move->move;
-    U8 flags = MOVE_FLAGS(mov);
-
-    if (mov == pvmove) {
+    if (mp->move == pvmove) {
         score = SCORE_PV;
         goto scoring;
     }
 
-    if (flags & 0x4) {
-        score = SCORE_WCAPTURE + MVV_LVA[board->squares[MOVE_TO(mov)]][board->squares[MOVE_FROM(mov)]];
+    if (IS_CAPTURE(mp->move)) {
+        score = SCORE_CAPTURE + MVV_LVA[board->squares[MOVE_TO(mp->move)]][board->squares[MOVE_FROM(mp->move)]];
     } else {
-        if (mov == si->killers[si->ply][0]) {
-            score = SCORE_KILLER1;
-        } else if (mov == si->killers[si->ply][1]) {
-            score = SCORE_KILLER2;
-        } else if (board->last_move.piece != _) {
-            if (((int)si->counter_moves[board->last_move.piece][board->last_move.to].piece == board->squares[MOVE_FROM(mov)])
-                && ((int)si->counter_moves[board->last_move.piece][board->last_move.to].piece == MOVE_TO(mov))) {
-                score = SCORE_COUNTER;
-            }
+        if (!IS_PROMOTION(mp->move)) {
+            if (mp->move == si->killers[0][si->ply]) {score = SCORE_KILLER1;}
+            else if (mp->move == si->killers[1][si->ply]) {score = SCORE_KILLER2;}
+            else {score = history_heuristic[board->side][board->squares[MOVE_FROM(mp->move)]][board->squares[MOVE_TO(mp->move)]];}
+
         } else {
-            score = history_table[board->side][MOVE_FROM(mov)][MOVE_TO(mov)];
+            if (MOVE_PROMOTE_TO(mp->move) == 3) {
+                score = SCORE_PROMOTE;
+            } else {score = SCORE_UNDERPROMOTE;}
+
         }
     }
-    if (flags & 0x8) {
-        if (flags & 0x3 == 0x3) {
-            score = SCORE_PROMOTE;
-        } else {
-            score = SCORE_UNDERPROM;
-        }
-    }
+
     scoring:
-        move->score = score;
+        mp->score = score;
 }
 
-void score_moves_qsearch(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
+void score_moves(board_t* board, search_info_t* si, move_t* mp, int nmoves, U16 pvmove) {
     int i;
-    for (i=0;i<nm;i++) {
-        score_qsearch(board,si,(ms+i), pvmove);
+    for (i=0; i<nmoves; i++) {
+        score_move(board, si, (mp+i), pvmove);
     }
 }
 
-void score_moves(board_t* board, search_info_t* si, move_t* ms, int nm, U16 pvmove) {
+void print_moves(board_t* board, move_t* mp, int nmoves) {
     int i;
-    for (i=0;i<nm;i++) {
-        score_move(board,si,(ms+i), pvmove);
+    for (i=0; i<nmoves; i++) {
+        printf("Move ");
+        print_move((mp+i)->move);
+        printf(" Score %d\n", (mp+i)->score);
     }
 }
 
-U16 pick_move(move_t* ms, int nm) {
-    if (!nm) {return NOMOVE;}
+U16 pick_move(move_t* mp, int nmoves) {
+    int i, bestidx = -1, bestscore = -1;
+    if (!nmoves) { return NOMOVE; }
 
-    int best_score = -1;
-    int best_idx = -1;
-    for (int i=0;i<nm;i++) {
-        if ((ms+i)->score > best_score) {
-            best_score = (ms+i)->score;
-            best_idx = i;
+    for (i=0; i<nmoves; i++) {
+        if ((mp+i)->score > bestscore) {
+            bestidx = i;
+            bestscore = (mp+i)->score;
         }
     }
-    if (best_idx != 0) {swap_moves(ms,ms+best_idx);}
-    return ms->move;
-}
-
-U16 pick_move_qsearch(move_t* ms, int nm) {
-    if (!nm) {return NOMOVE;}
-
-    int best_score = -1;
-    int best_idx = -1;
-    for (int i=0;i<nm;i++) {
-        if ((ms+i)->score > best_score) {
-            best_score = (ms+i)->score;
-            best_idx = i;
-        }
+    if (bestidx != 0) {
+        swap_moves(mp, mp+bestidx);
     }
-    if (best_idx != 0) {swap_moves(ms,ms+best_idx);}
-    if (ms->score < SCORE_CAPTURE) {return NOMOVE;}
-    return ms->move;
+    return mp->move;
 }

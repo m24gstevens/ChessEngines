@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #ifdef _MSC_VER
     #include <windows.h>
@@ -74,9 +75,9 @@ typedef struct {
     enumSide side;
     int rule50;
     U64 hash;
-    counter_move_t last_move;
     U64 game_history[MAXHIST];
     int hply;
+    counter_move_t last_move;
 } board_t;
 
 typedef struct {
@@ -87,8 +88,7 @@ typedef struct {
 typedef struct {
     move_t* msp[MAXPLY];
     U16 pv[MAXPLY][MAXPLY];
-    U16 killers[MAXPLY][2];
-    counter_move_t counter_moves[12][64];
+    U16 killers[2][MAXPLY];
     U16 bestmove;
     int ply;
     long nodes;
@@ -125,6 +125,17 @@ typedef struct {
     U8 depth;
     U8 flags;
 } hash_t;
+
+typedef struct {
+    U64 hash;
+    int evaluation;
+    bool valid;
+} hash_eval_t;
+
+typedef struct {
+    U8 mob;
+    U8 trop;
+} piece_eval_t;
 
 
 #endif

@@ -109,7 +109,6 @@ void parse_fen(board_t* board,char* fen) {
 
     board->hash = hash_position(board);
 
-    clear_history();
     board->hply=0;
 }
 

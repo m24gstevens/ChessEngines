@@ -1,4 +1,7 @@
 #include "eval.h"
+#include "tt.h"
+
+const int piece_values[13] = {10000,100,300,320,500,900,-10000,-100,-300,-320,-500,-900,-1};
 
 // Bitboard routines for evaluation
 static inline U64 northFill(U64 bb) {
@@ -55,6 +58,42 @@ static inline int count_black_backward_pawns(U64 bpawns) {
     return popcount(bpawns); 
 }
 
+static inline U64 wpawn_attack_mask(U64 bb) {
+    U64 aside = westOne(bb) | eastOne(bb);
+    return northOne(aside);
+}
+
+static inline U64 bpawn_attack_mask(U64 bb) {
+    U64 aside = westOne(bb) | eastOne(bb);
+    return southOne(aside);
+}
+
+// Piece evaluations
+
+static inline void eval_knight(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare kn, enumSquare oppKing, enumSide side) {
+    peval->trop = DISTANCE(kn,oppKing);
+    U64 bb = (knightAttackTable[kn] & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
+    peval->mob = popcount(bb);
+}
+
+static inline void eval_bishop(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare bsh, enumSquare oppKing, enumSide side) {
+    peval->trop = DISTANCE(bsh,oppKing);
+    U64 bb = (bishopAttacks(bsh,board->occupancies[BOTH]) & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
+    peval->mob = popcount(bb);
+}
+
+static inline void eval_rook(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare rk, enumSquare oppKing, enumSide side) {
+    peval->trop = DISTANCE(rk,oppKing);
+    U64 bb = (rookAttacks(rk,board->occupancies[BOTH]) & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
+    peval->mob = popcount(bb);
+}
+
+static inline void eval_queen(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare qn, enumSquare oppKing, enumSide side) {
+    peval->trop = DISTANCE(qn,oppKing);
+    U64 bb = (rookAttacks(qn,board->occupancies[BOTH]) | bishopAttacks(qn,board->occupancies[BOTH])) & ~board->occupancies[side];
+    peval->mob = popcount(bb);
+}
+
 // material_scores[phase][piece]
 const int material_scores[2][6] = {
     {0,95,300,320,460,920,},
@@ -69,14 +108,25 @@ const int semiopen_bonus[2] = {12,12};
 const int open_bonus[2] = {20,20};
 
 const int no_pawn_penalty = 150;
+const int bad_bishop[2] = {25,25};
+const int trapped_rook[2] = {40,40};
 
 const int undeveloped_penalty = 12;
 const U64 firstRank = C64(0xFF);
 const U64 lastRank = C64(0xFF00000000000000);
 
+const int knight_mobility[2] = {3,4};
+const int knight_tropism[2] = {3,3};
+const int bishop_mobility[2] = {3,4};
+const int bishop_tropism[2] = {2,1};
+const int rook_mobility[2] = {1,2};
+const int rook_tropism[2] = {1,1};
+const int queen_mobility[2] = {1,1};
+const int queen_tropism[2] = {4,2};
+
 // pstables[phase][piece][sq] from white perspective
 const int pstables[2][6][64] = {
-    {{-10, 10, 15, -15, 0, 5, 10, 0,
+    {{-10, 10, 0, -20, 0, -10, 10, 0,
     -10,-10,-15,-25,-20,-20,-10,-5,
     -15,-15,-20,-35,-35,-20,-15,-15,
     -25,-25,-30,-40,-40,-30,-25,-25,
@@ -176,94 +226,26 @@ const int pstables[2][6][64] = {
 };
 
 int evaluate(board_t* board) {
-    int mgscore[2], egscore[2], pcscore[2], score, i, pc, sq, col, mat, eg, mg, ct;
-    U64 bb, mask;
+    int score, i, pc, side, sq, pscore;
 
-    pcscore[0] = pcscore[1] = 0;
-    egscore[0] = egscore[1] = 0;
-    mgscore[0] = mgscore[1] = 0;
+    if ((score = probe_eval_tt(board->hash)) != INVALID) {
+        return score;
+    }
 
-    for (int i=0;i<64;i++) {
+    score = 0;
+
+    for (i=0; i<64; i++) {
         pc = board->squares[i];
         if (pc == _) {continue;}
-        col = pc / 6;
-        sq = (col ? 56^i : i);
+        score += piece_values[pc];
 
-        pcscore[col] += material_scores[EG][pc % 6];
-        mgscore[col] += material_scores[MG][pc % 6];
-        mgscore[col] += pstables[MG][pc % 6][sq];
-        egscore[col] += pstables[EG][pc % 6][sq];
-    }
-    egscore[0] += pcscore[0];
-    egscore[1] += pcscore[1];
-
-    // Doubled, isolated, backward
-    ct = count_doubled_pawns(board->bitboards[P]);
-    mgscore[WHITE] -= ct*doubled_pawn_penalty[MG];
-    egscore[WHITE] -= ct*doubled_pawn_penalty[EG];
-    ct = count_doubled_pawns(board->bitboards[p]);
-    mgscore[BLACK] -= ct*doubled_pawn_penalty[MG];
-    egscore[BLACK] -= ct*doubled_pawn_penalty[EG];
-
-    ct = count_isolated_pawns(board->bitboards[P]);
-    mgscore[WHITE] -= ct*isolated_pawn_penalty[MG];
-    egscore[WHITE] -= ct*isolated_pawn_penalty[EG];
-    ct = count_isolated_pawns(board->bitboards[p]);
-    mgscore[BLACK] -= ct*isolated_pawn_penalty[MG];
-    egscore[BLACK] -= ct*isolated_pawn_penalty[EG];
-
-    bb = white_passed_pawns(board->bitboards[P], board->bitboards[p]);
-    while (bb) {
-        sq = bitscanForward(bb);
-        POP_LS1B(bb);
-        egscore[WHITE] += passed_pawn_bonus[sq / 8];
-    }
-    bb = black_passed_pawns(board->bitboards[P], board->bitboards[p]);
-    while (bb) {
-        sq = bitscanForward(bb);
-        POP_LS1B(bb);
-        egscore[BLACK] += passed_pawn_bonus[7 - (sq / 8)];
+        side = pc / 6;
+        sq = (side ? 56^i : i);
+        pscore = pstables[MG][pc % 6][sq];
+        score += (side ? -pscore : pscore);
     }
 
-    mask = ~fileFill(board->bitboards[P] | board->bitboards[p]);
-
-    bb = mask & board->bitboards[R];
-    ct = popcount(bb);
-    mgscore[WHITE] += ct * open_bonus[MG];
-    egscore[WHITE] += ct * open_bonus[EG];
-
-    bb = mask & board->bitboards[r];
-    ct = popcount(bb);
-    mgscore[BLACK] += ct * open_bonus[MG];
-    egscore[BLACK] += ct * open_bonus[EG];
-
-    bb = ~fileFill(board->bitboards[P]) & board->bitboards[R] & ~mask;
-    ct = popcount(bb);
-    mgscore[WHITE] += ct * semiopen_bonus[MG];
-    egscore[WHITE] += ct * semiopen_bonus[EG];
-
-    bb = ~fileFill(board->bitboards[p]) & board->bitboards[r] & ~mask;
-    ct = popcount(bb);
-    mgscore[BLACK] += ct * semiopen_bonus[MG];
-    egscore[BLACK] += ct * semiopen_bonus[EG];
-
-    mgscore[WHITE] -= popcount((board->bitboards[N] | board->bitboards[B]) & firstRank) * undeveloped_penalty;
-    mgscore[BLACK] -= popcount((board->bitboards[b] | board->bitboards[b]) & lastRank) * undeveloped_penalty;
-
-    if (!board->bitboards[P]) {egscore[WHITE] -= no_pawn_penalty;}
-    if (!board->bitboards[p]) {egscore[BLACK] -= no_pawn_penalty;}
-
-
-    mg = mgscore[0] - mgscore[1];
-    eg = egscore[0] - egscore[1];
-    mat = pcscore[0] + pcscore[1];
-
-    if (mat > MGTHRESH) {score = mg;}
-    else if (mat < EGTHRESH) {score = eg;}
-    else {
-        score = ((mat - EGTHRESH)*mg + (MGTHRESH - mat)*eg) / (MGTHRESH - EGTHRESH);
-    }
-    score = mg;
+    store_eval_tt(board->hash,score*(1-2*board->side));
 
     return score*(1-2*board->side);
 }

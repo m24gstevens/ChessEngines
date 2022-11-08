@@ -1,18 +1,18 @@
 #include "bitboard.h"
 #include "common.h"
 #include "tt.h"
+#include "order.h"
 
 // Useful positions
 
 char *starting_position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 char *kiwipete = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ";
-char *cmk_position = "r2q1rk1/ppp2ppp/2n1bn2/2b1p3/3pP3/3P1NPP/PPP1NPB1/R1BQ1RK1 b - - 0 9 ";
-char *headache_position = "r3k2r/pbn2ppp/8/1P1pP3/P1qP4/5B2/3Q1PPP/R3K2R w KQkq - 0 1";
-char *repetitions = "2r3k1/R7/8/1R6/8/8/P4KPP/8 w - - 0 40 ";
+char *capture_position = "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1 ";
+char *unsafe_king = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
 
 // Xorshift PRNG
 
-xorshift32_state seed = {0x8AFBCBAAUL};
+xorshift32_state seed = {0x4828501};
 
 U32 xorshift32(xorshift32_state *st) {
     U32 x = st->state;
@@ -99,6 +99,7 @@ long get_time_ms() {
 void init_tables() {
     init_attack_tables();
     init_random_keys();
+    clear_history_heuristic();
     tt_setsize(0x4000000);
 }
 
