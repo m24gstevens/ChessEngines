@@ -1,10 +1,23 @@
 #include "tt.h"
+#include "moves.h"
 
 hash_t* tt = NULL;
 hash_eval_t* eval_tt = NULL;
 
 long tt_size = 0;   // Num entries - 1
 long eval_tt_size = 0;
+
+void clear_tt() {
+    for (int index = 0; index <= tt_size; index++) {
+        hash_t* entry = &tt[index];
+        entry->hash = C64(0);
+        entry->val = 0;
+        entry->depth = 0;
+        entry->bestmove = 0;
+        entry->flags = 0;
+        entry->valid = false;
+    }
+}
 
 void tt_setsize(long size) {
     if (tt != NULL) {free(tt);}
@@ -18,6 +31,7 @@ void tt_setsize(long size) {
     while (tt_size & (tt_size - 1)) {
         tt_size &= (tt_size - 1);
     }
+
     eval_tt_size = tt_size / 2;
     tt = (hash_t *) malloc(tt_size * sizeof(hash_t));
     eval_tt = (hash_eval_t*) malloc(eval_tt_size * sizeof(hash_eval_t));
@@ -25,6 +39,7 @@ void tt_setsize(long size) {
     eval_tt_size -= 1;
 
     clear_eval_tt();
+    clear_tt();
 }
 
 int probe_tt(board_t* board, int ply, int depth, int alpha, int beta, U16* best) {
@@ -33,7 +48,7 @@ int probe_tt(board_t* board, int ply, int depth, int alpha, int beta, U16* best)
 
     hash_t* phashe = &tt[board->hash & tt_size];
 
-    if (phashe->hash == board->hash) {
+    if (phashe->valid && phashe->hash == board->hash) {
         *best = phashe->bestmove;
 
         if (phashe->depth >= depth) {
@@ -54,7 +69,7 @@ void store_tt(board_t* board, int depth, int ply, int val, U8 flags, U16 best) {
 
     hash_t* phashe = &tt[board->hash & tt_size];
 
-    if ((phashe->hash == board->hash) && (phashe->depth > ply)) {return;}
+    if ((phashe->hash == board->hash) && (phashe->depth > depth)) {return;}
 
     if (val > MATE_THRESHOLD) {val += ply;}
     if (val < -MATE_THRESHOLD) {val -= ply;}
@@ -64,7 +79,18 @@ void store_tt(board_t* board, int depth, int ply, int val, U8 flags, U16 best) {
     phashe->flags = flags;
     phashe->depth = depth;
     phashe->bestmove = best;
+    phashe->valid = true;
 }
+
+void age_tt() {
+    if (!tt_size) {return;}
+
+    for (int i=0; i<=tt_size; i++) {
+        tt[i].valid = false;
+    }
+}
+
+
 
 int probe_eval_tt(U64 key) {
     int score;

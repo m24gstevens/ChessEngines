@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
+#include <signal.h>
 
 #ifdef _MSC_VER
     #include <windows.h>
@@ -34,7 +35,7 @@ enum castleFlags {WCK=1, WCQ=2, BCK=4, BCQ=8};
 
 #define MAXPLY 63
 #define MAXHIST 800
-#define MAXMOVES 10000
+#define MAXMOVES 20000
 
 #define NOMOVE 0
 #define NULLMOVE 0xFFFF
@@ -93,6 +94,7 @@ typedef struct {
     int ply;
     long nodes;
     int sdepth;
+    bool follow_pv;
 } search_info_t;
 
 typedef struct {
@@ -124,6 +126,7 @@ typedef struct {
     U16 bestmove;
     U8 depth;
     U8 flags;
+    bool valid;
 } hash_t;
 
 typedef struct {
@@ -137,5 +140,6 @@ typedef struct {
     U8 trop;
 } piece_eval_t;
 
+#define DEBUG
 
 #endif

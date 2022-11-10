@@ -100,7 +100,7 @@ void init_tables() {
     init_attack_tables();
     init_random_keys();
     clear_history_heuristic();
-    tt_setsize(0x4000000);
+    tt_setsize(0x4000000);  //0x4000000
 }
 
 // History

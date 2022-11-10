@@ -64,3 +64,24 @@ int SEE(board_t* board, enumSide side, U16 move) {
         see_list[nc - 1] = (-see_list[nc - 1] > see_list[nc]) ? see_list[nc - 1] : -see_list[nc];
     return see_list[0];
 }
+
+
+bool good_capture(board_t* board, U16 move) {
+    int sq_fr = MOVE_FROM(move);
+    int sq_to = MOVE_TO(move);
+    int pc_fr = board->squares[sq_fr];
+    int pc_to = board->squares[sq_to];
+    int val = simple_piece_values[pc_to];
+
+    if (pc_fr % 6 == P) {return true;}
+
+    if (simple_piece_values[pc_to] >= simple_piece_values[pc_fr] - 50) {return true;}
+
+    board->occupancies[BOTH] ^= (C64(1) << pc_fr);
+    if (!is_square_attacked(board,sq_to,1^board->side)) {
+        board->occupancies[BOTH] ^= (C64(1) << pc_fr);
+        return true;
+    }
+    board->occupancies[BOTH] ^= (C64(1) << pc_fr);
+    return false;
+}

@@ -23,7 +23,7 @@
 #define MOVE_FLAGS(move) ((move)>>12 & 0xF)
 #define IS_PROMOTION(move) ((move) & 0x8000)
 #define IS_CAPTURE(move) ((move) & 0x4000)
-#define IS_QUIET(move) ((move) & 0xC000)
+#define IS_TACTICAL(move) ((move) & 0xC000)
 #define MOVE_PROMOTE_TO(move) ((move)>>12 & 0x3)
 
 extern char* square_strings[64];

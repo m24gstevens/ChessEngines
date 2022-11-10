@@ -68,42 +68,17 @@ static inline U64 bpawn_attack_mask(U64 bb) {
     return southOne(aside);
 }
 
-// Piece evaluations
-
-static inline void eval_knight(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare kn, enumSquare oppKing, enumSide side) {
-    peval->trop = DISTANCE(kn,oppKing);
-    U64 bb = (knightAttackTable[kn] & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
-    peval->mob = popcount(bb);
-}
-
-static inline void eval_bishop(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare bsh, enumSquare oppKing, enumSide side) {
-    peval->trop = DISTANCE(bsh,oppKing);
-    U64 bb = (bishopAttacks(bsh,board->occupancies[BOTH]) & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
-    peval->mob = popcount(bb);
-}
-
-static inline void eval_rook(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare rk, enumSquare oppKing, enumSide side) {
-    peval->trop = DISTANCE(rk,oppKing);
-    U64 bb = (rookAttacks(rk,board->occupancies[BOTH]) & ~board->occupancies[side]) & ~(oppPawn & (~board->occupancies[BOTH] | board->bitboards[p - 6*side]));
-    peval->mob = popcount(bb);
-}
-
-static inline void eval_queen(board_t* board, piece_eval_t* peval, U64 oppPawn, enumSquare qn, enumSquare oppKing, enumSide side) {
-    peval->trop = DISTANCE(qn,oppKing);
-    U64 bb = (rookAttacks(qn,board->occupancies[BOTH]) | bishopAttacks(qn,board->occupancies[BOTH])) & ~board->occupancies[side];
-    peval->mob = popcount(bb);
-}
-
 // material_scores[phase][piece]
 const int material_scores[2][6] = {
     {0,95,300,320,460,920,},
     {0,100,280,290,500,930,},
 };
 
-const int doubled_pawn_penalty[2] = {15,20};
+const int doubled_pawn_penalty[2] = {13,18};
 const int isolated_pawn_penalty[2] = {15,12};
 const int backward_pawn_penalty[2] = {15,12};
-const int passed_pawn_bonus[8] = {0, 10, 20, 30, 40, 50, 60, 70};
+const int passed_pawn_bonus[8] = {0, 10, 20, 40, 60, 80, 100, 0};
+
 const int semiopen_bonus[2] = {12,12};
 const int open_bonus[2] = {20,20};
 
@@ -111,18 +86,8 @@ const int no_pawn_penalty = 150;
 const int bad_bishop[2] = {25,25};
 const int trapped_rook[2] = {40,40};
 
-const int undeveloped_penalty = 12;
 const U64 firstRank = C64(0xFF);
 const U64 lastRank = C64(0xFF00000000000000);
-
-const int knight_mobility[2] = {3,4};
-const int knight_tropism[2] = {3,3};
-const int bishop_mobility[2] = {3,4};
-const int bishop_tropism[2] = {2,1};
-const int rook_mobility[2] = {1,2};
-const int rook_tropism[2] = {1,1};
-const int queen_mobility[2] = {1,1};
-const int queen_tropism[2] = {4,2};
 
 // pstables[phase][piece][sq] from white perspective
 const int pstables[2][6][64] = {
@@ -226,6 +191,161 @@ const int pstables[2][6][64] = {
 };
 
 int evaluate(board_t* board) {
+    int score, i, pc, side, sq, totalmat, mid, end, ct;
+    int mgscore[2], egscore[2], matscore[2];
+    U64 mask, bb;
+
+    if ((score = probe_eval_tt(board->hash)) != INVALID) {
+        return score;
+    }
+
+    mgscore[0] = mgscore[1] = 0;
+    egscore[0] = egscore[1] = 0;
+    matscore[0] = matscore[1] = 0;
+
+    for (i=0; i<64; i++) {
+        pc = board->squares[i];
+        if (pc == _) {continue;}
+
+        side = pc / 6;
+        sq = (side ? 56^i : i);
+        
+        matscore[side] += material_scores[EG][pc % 6];
+        mgscore[side] += material_scores[MG][pc % 6];
+        mgscore[side] += pstables[MG][pc % 6][sq];
+        egscore[side] += pstables[EG][pc % 6][sq];
+    }
+
+    egscore[WHITE] += matscore[WHITE];
+    egscore[BLACK] += matscore[BLACK];
+
+    // Doubled, isolated, backward
+    ct = count_doubled_pawns(board->bitboards[P]);
+    mgscore[WHITE] -= ct*doubled_pawn_penalty[MG];
+    egscore[WHITE] -= ct*doubled_pawn_penalty[EG];
+    ct = count_doubled_pawns(board->bitboards[p]);
+    mgscore[BLACK] -= ct*doubled_pawn_penalty[MG];
+    egscore[BLACK] -= ct*doubled_pawn_penalty[EG];
+
+    ct = count_isolated_pawns(board->bitboards[P]);
+    mgscore[WHITE] -= ct*isolated_pawn_penalty[MG];
+    egscore[WHITE] -= ct*isolated_pawn_penalty[EG];
+    ct = count_isolated_pawns(board->bitboards[p]);
+    mgscore[BLACK] -= ct*isolated_pawn_penalty[MG];
+    egscore[BLACK] -= ct*isolated_pawn_penalty[EG];
+
+    bb = white_passed_pawns(board->bitboards[P], board->bitboards[p]);
+    while (bb) {
+        sq = bitscanForward(bb);
+        POP_LS1B(bb);
+        egscore[WHITE] += passed_pawn_bonus[sq / 8];
+    }
+    bb = black_passed_pawns(board->bitboards[P], board->bitboards[p]);
+    while (bb) {
+        sq = bitscanForward(bb);
+        POP_LS1B(bb);
+        egscore[BLACK] += passed_pawn_bonus[7 - (sq / 8)];
+    }
+
+    if (!board->bitboards[P]) {egscore[WHITE] -= no_pawn_penalty;}
+    if (!board->bitboards[p]) {egscore[BLACK] -= no_pawn_penalty;}
+
+    mask = ~fileFill(board->bitboards[P] | board->bitboards[p]);
+
+    bb = mask & board->bitboards[R];
+    ct = popcount(bb);
+    mgscore[WHITE] += ct * open_bonus[MG];
+    egscore[WHITE] += ct * open_bonus[EG];
+
+    bb = mask & board->bitboards[r];
+    ct = popcount(bb);
+    mgscore[BLACK] += ct * open_bonus[MG];
+    egscore[BLACK] += ct * open_bonus[EG];
+
+    bb = ~fileFill(board->bitboards[P]) & board->bitboards[R] & ~mask;
+    ct = popcount(bb);
+    mgscore[WHITE] += ct * semiopen_bonus[MG];
+    egscore[WHITE] += ct * semiopen_bonus[EG];
+
+    bb = ~fileFill(board->bitboards[p]) & board->bitboards[r] & ~mask;
+    ct = popcount(bb);
+    mgscore[BLACK] += ct * semiopen_bonus[MG];
+    egscore[BLACK] += ct * semiopen_bonus[EG];
+
+
+    mid = mgscore[WHITE] - mgscore[BLACK];
+    end = egscore[WHITE] - egscore[BLACK];
+
+    totalmat = matscore[WHITE] + matscore[BLACK];
+    if (totalmat > EGTHRESH) {score = mid;} 
+    else if (totalmat <= EGTHRESH) {score = end;}
+    else {
+        score = (mid*(totalmat - EGTHRESH) + end*(MGTHRESH - totalmat)) / (MGTHRESH - EGTHRESH);
+    } 
+
+    store_eval_tt(board->hash,score*(1-2*board->side));
+
+    return score*(1-2*board->side);
+}
+
+bool is_draw(board_t* board, search_info_t* si) {
+    // Draw by repetition or 50 move rule
+    if (board->rule50 >= 100) {return true;}
+    board->game_history[board->hply + si->ply] = board->hash;
+    
+    for (int x = board->hply + si->ply - 2;x>=MAX(0,board->hply + si->ply - board->rule50);x-=2) {
+        if (board->hash == board->game_history[x]) {return true;}
+    }
+    return false;
+}
+
+/*
+    int score, i, pc, side, sq, totalmat, mid, end;
+    int mgscore[2], egscore[2], matscore[2];
+
+    if ((score = probe_eval_tt(board->hash)) != INVALID) {
+        return score;
+    }
+
+    mgscore[0] = mgscore[1] = 0;
+    egscore[0] = egscore[1] = 0;
+    matscore[0] = matscore[1] = 0;
+
+    for (i=0; i<64; i++) {
+        pc = board->squares[i];
+        if (pc == _) {continue;}
+
+        side = pc / 6;
+        sq = (side ? 56^i : i);
+        
+        matscore[side] += material_scores[EG][pc];
+        mgscore[side] += material_scores[MG][pc];
+        mgscore[side] += pstables[MG][pc][sq];
+        egscore[side] += pstables[EG][pc][sq];
+    }
+
+    egscore[WHITE] += matscore[WHITE];
+    egscore[BLACK] += matscore[BLACK];
+
+    mid = mgscore[WHITE] - mgscore[BLACK];
+    end = egscore[WHITE] - egscore[BLACK];
+
+    totalmat = matscore[WHITE] + matscore[BLACK];
+    if (totalmat > EGTHRESH) {score = mid;} 
+    else {score = end;} /* (totalmat <= EGTHRESH)
+    else {
+        score = (mid*(totalmat - EGTHRESH) + end*(MGTHRESH - totalmat)) / (MGTHRESH - EGTHRESH);
+    } 
+    score = mgscore[WHITE] - mgscore[BLACK];
+
+    store_eval_tt(board->hash,score*(1-2*board->side));
+
+    return score*(1-2*board->side);
+
+*/
+
+/*
+
     int score, i, pc, side, sq, pscore;
 
     if ((score = probe_eval_tt(board->hash)) != INVALID) {
@@ -248,15 +368,5 @@ int evaluate(board_t* board) {
     store_eval_tt(board->hash,score*(1-2*board->side));
 
     return score*(1-2*board->side);
-}
 
-bool is_draw(board_t* board, search_info_t* si) {
-    // Draw by repetition or 50 move rule
-    if (board->rule50 >= 100) {return true;}
-    board->game_history[board->hply + si->ply] = board->hash;
-    
-    for (int x = board->hply + si->ply - 2;x>=MAX(0,board->hply + si->ply - board->rule50);x-=2) {
-        if (board->hash == board->game_history[x]) {return true;}
-    }
-    return false;
-}
+*/

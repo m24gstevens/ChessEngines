@@ -49,8 +49,9 @@ void print_board(board_t board) {
     printf("Castling rights: %d\n", board.castle_flags);
     if (board.ep_square != -1) {
         printf("En Passent Target: %c%c\n", 'a'+board.ep_square%8, '1'+board.ep_square/8);
-    } else 
-        printf("\n");
+    } 
+    printf("Hash %lld\n\n", board.hash);
+    
 }
 
 void parse_fen(board_t* board,char* fen) {
